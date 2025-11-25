@@ -49,7 +49,7 @@ startBtn.addEventListener("click", () => {
   engine = new AirHockeyEngine({
     container,
     onScore: (blue, red) => {
-      scoreEl.textContent = `Blue ${blue} : ${red} Red`;
+      scoreEl.innerHTML = `<span class="score-blue">Blue ${blue}</span><span class="score-sep">:</span><span class="score-red">${red} Red</span>`;
     },
     blueAI,
     redAI,

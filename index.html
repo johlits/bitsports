@@ -72,8 +72,24 @@
         color: #f1f5f9;
       }
       #score {
-        margin-top: 0.5rem;
-        font-size: 0.9rem;
+        margin-top: 0.75rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        text-align: center;
+        padding: 0.5rem;
+        background: #0f172a;
+        border-radius: 0.375rem;
+        letter-spacing: 0.025em;
+      }
+      .score-blue {
+        color: #38bdf8;
+      }
+      .score-red {
+        color: #f97373;
+      }
+      .score-sep {
+        color: #64748b;
+        margin: 0 0.25rem;
       }
       #ui.collapsed {
         padding: 0.35rem 0.6rem;
@@ -112,7 +128,7 @@
         <select id="red-ai"></select>
 
         <button id="start-btn">Start Match</button>
-        <div id="score">Blue 0 : 0 Red</div>
+        <div id="score"><span class="score-blue">Blue 0</span><span class="score-sep">:</span><span class="score-red">0 Red</span></div>
       </div>
     </div>
     <div id="canvas-container"></div>
