@@ -7,8 +7,8 @@ import * as claudeOpus45 from "./claudeOpus45AI.js";
 import * as human from "./humanAI.js";
 
 export const allAIs = [ 
-    human,
     claudeOpus45,
     geminiHigh,
     gpt51High,
+    human,
 ];
