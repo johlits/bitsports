@@ -46,6 +46,9 @@ startBtn.addEventListener("click", () => {
     engine.stop();
   }
 
+  // Reset score display
+  scoreEl.innerHTML = `<span class="score-blue">Blue 0</span><span class="score-sep">:</span><span class="score-red">0 Red</span>`;
+
   engine = new AirHockeyEngine({
     container,
     onScore: (blue, red) => {
