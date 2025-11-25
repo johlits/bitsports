@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Bitsports</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #050816;
+        color: #f9fafb;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #ui {
+        position: fixed;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+        background: rgba(15, 23, 42, 0.9);
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        max-width: 260px;
+      }
+      #ui-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      #ui h1 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      #ui-toggle {
+        border: none;
+        background: rgba(15, 23, 42, 0.9);
+        color: #e5e7eb;
+        border-radius: 999px;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      #ui label {
+        display: block;
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+      }
+      #ui select, #ui button {
+        margin-top: 0.25rem;
+        width: 100%;
+        font-size: 0.8rem;
+      }
+      #score {
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+      }
+      #ui.collapsed {
+        padding: 0.35rem 0.6rem;
+      }
+      #ui.collapsed #ui-body {
+        display: none;
+      }
+      #ui.collapsed h1 {
+        font-size: 0.85rem;
+      }
+      #ui.collapsed #ui-toggle {
+        font-size: 0.7rem;
+      }
+      @media (max-width: 640px) {
+        #ui {
+          max-width: 220px;
+        }
+      }
+      #canvas-container {
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div id="ui-header">
+        <h1>Bitsports</h1>
+        <button id="ui-toggle" type="button">Hide</button>
+      </div>
+      <div id="ui-body">
+        <label for="blue-ai">Blue AI</label>
+        <select id="blue-ai"></select>
+
+        <label for="red-ai">Red AI</label>
+        <select id="red-ai"></select>
+
+        <button id="start-btn">Start Match</button>
+        <div id="score">Blue 0 : 0 Red</div>
+      </div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
