@@ -11,6 +11,16 @@ const container = document.getElementById("canvas-container");
 
 let engine = null;
 
+// Create engine immediately to show board preview
+engine = new AirHockeyEngine({
+  container,
+  onScore: (blue, red) => {
+    scoreEl.innerHTML = `<span class="score-blue">Blue ${blue}</span><span class="score-sep">:</span><span class="score-red">${red} Red</span>`;
+  },
+  blueAI: allAIs[0],
+  redAI: allAIs[0],
+});
+
 function populateAISelect(select) {
   allAIs.forEach((ai, index) => {
     const opt = document.createElement("option");
@@ -49,14 +59,11 @@ startBtn.addEventListener("click", () => {
   // Reset score display
   scoreEl.innerHTML = `<span class="score-blue">Blue 0</span><span class="score-sep">:</span><span class="score-red">0 Red</span>`;
 
-  engine = new AirHockeyEngine({
-    container,
-    onScore: (blue, red) => {
-      scoreEl.innerHTML = `<span class="score-blue">Blue ${blue}</span><span class="score-sep">:</span><span class="score-red">${red} Red</span>`;
-    },
-    blueAI,
-    redAI,
-  });
+  // Update AIs and reset scores
+  engine.blueAI = blueAI;
+  engine.redAI = redAI;
+  engine.blueScore = 0;
+  engine.redScore = 0;
 
   engine.start();
 });

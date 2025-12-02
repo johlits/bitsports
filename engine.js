@@ -114,8 +114,6 @@ export class AirHockeyEngine {
         hh - cornerRadius + Math.sin(angle) * cornerRadius
       ));
     }
-    // Right edge
-    borderPoints.push(new THREE.Vector3(hw, 0, -hh + cornerRadius));
     // Top-right corner
     for (let i = 0; i <= segments; i++) {
       const angle = 0 - (i / segments) * (Math.PI / 2);
@@ -245,8 +243,21 @@ export class AirHockeyEngine {
     this.bluePaddle.position.set(0, 0.1, this.tableHeight * 0.25);
     this.redPaddle.position.set(0, 0.1, -this.tableHeight * 0.25);
 
+    // Don't add paddles initially - they'll be added when game starts
+    this.bluePaddle.visible = false;
+    this.redPaddle.visible = false;
     this.scene.add(this.bluePaddle);
     this.scene.add(this.redPaddle);
+    
+    // Start preview render loop
+    this._previewMode = true;
+    this._renderPreview();
+  }
+  
+  _renderPreview() {
+    if (!this._previewMode) return;
+    this.renderer.render(this.scene, this.camera);
+    requestAnimationFrame(() => this._renderPreview());
   }
 
   _spawnPuck(direction = 1) {
@@ -651,6 +662,11 @@ export class AirHockeyEngine {
   }
 
   start() {
+    // Stop preview mode and show paddles
+    this._previewMode = false;
+    this.bluePaddle.visible = true;
+    this.redPaddle.visible = true;
+    
     this.resetPuck(1);
     this.lastTime = performance.now();
     const loop = (time) => {
