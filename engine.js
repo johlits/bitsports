@@ -67,7 +67,23 @@ export class AirHockeyEngine {
     this.scene.add(light);
     this.scene.add(new THREE.AmbientLight(0x64748b, 0.6));
 
-    const tableGeom = new THREE.PlaneGeometry(this.tableWidth, this.tableHeight);
+    // Create rounded rectangle shape for the table
+    const cornerRadius = 1.0;
+    const tableShape = new THREE.Shape();
+    const hw = this.tableWidth / 2;
+    const hh = this.tableHeight / 2;
+    
+    tableShape.moveTo(-hw + cornerRadius, -hh);
+    tableShape.lineTo(hw - cornerRadius, -hh);
+    tableShape.quadraticCurveTo(hw, -hh, hw, -hh + cornerRadius);
+    tableShape.lineTo(hw, hh - cornerRadius);
+    tableShape.quadraticCurveTo(hw, hh, hw - cornerRadius, hh);
+    tableShape.lineTo(-hw + cornerRadius, hh);
+    tableShape.quadraticCurveTo(-hw, hh, -hw, hh - cornerRadius);
+    tableShape.lineTo(-hw, -hh + cornerRadius);
+    tableShape.quadraticCurveTo(-hw, -hh, -hw + cornerRadius, -hh);
+    
+    const tableGeom = new THREE.ShapeGeometry(tableShape);
     const tableMat = new THREE.MeshStandardMaterial({
       color: 0x0f172a,
       emissive: 0x020617,
@@ -78,33 +94,69 @@ export class AirHockeyEngine {
     this.table.rotation.x = -Math.PI / 2;
     this.scene.add(this.table);
 
-    // Board border
+    // Board border (rounded rectangle outline)
     const borderMat = new THREE.MeshBasicMaterial({ color: 0x64748b });
-    const borderThickness = 0.06;
+    const borderThickness = 0.08;
     
-    // Top and bottom borders
-    const hBorderGeom = new THREE.PlaneGeometry(this.tableWidth, borderThickness);
-    const topBorder = new THREE.Mesh(hBorderGeom, borderMat);
-    topBorder.rotation.x = -Math.PI / 2;
-    topBorder.position.set(0, 0.001, -this.tableHeight / 2);
-    this.scene.add(topBorder);
+    // Create border as a line following the rounded rectangle
+    const borderPoints = [];
+    const segments = 16; // segments per corner
     
-    const bottomBorder = new THREE.Mesh(hBorderGeom, borderMat);
-    bottomBorder.rotation.x = -Math.PI / 2;
-    bottomBorder.position.set(0, 0.001, this.tableHeight / 2);
-    this.scene.add(bottomBorder);
+    // Bottom edge (from left to right)
+    borderPoints.push(new THREE.Vector3(-hw + cornerRadius, 0, hh));
+    borderPoints.push(new THREE.Vector3(hw - cornerRadius, 0, hh));
+    // Bottom-right corner
+    for (let i = 0; i <= segments; i++) {
+      const angle = Math.PI / 2 - (i / segments) * (Math.PI / 2);
+      borderPoints.push(new THREE.Vector3(
+        hw - cornerRadius + Math.cos(angle) * cornerRadius,
+        0,
+        hh - cornerRadius + Math.sin(angle) * cornerRadius
+      ));
+    }
+    // Right edge
+    borderPoints.push(new THREE.Vector3(hw, 0, -hh + cornerRadius));
+    // Top-right corner
+    for (let i = 0; i <= segments; i++) {
+      const angle = 0 - (i / segments) * (Math.PI / 2);
+      borderPoints.push(new THREE.Vector3(
+        hw - cornerRadius + Math.cos(angle) * cornerRadius,
+        0,
+        -hh + cornerRadius + Math.sin(angle) * cornerRadius
+      ));
+    }
+    // Top edge
+    borderPoints.push(new THREE.Vector3(-hw + cornerRadius, 0, -hh));
+    // Top-left corner
+    for (let i = 0; i <= segments; i++) {
+      const angle = -Math.PI / 2 - (i / segments) * (Math.PI / 2);
+      borderPoints.push(new THREE.Vector3(
+        -hw + cornerRadius + Math.cos(angle) * cornerRadius,
+        0,
+        -hh + cornerRadius + Math.sin(angle) * cornerRadius
+      ));
+    }
+    // Left edge
+    borderPoints.push(new THREE.Vector3(-hw, 0, hh - cornerRadius));
+    // Bottom-left corner
+    for (let i = 0; i <= segments; i++) {
+      const angle = Math.PI - (i / segments) * (Math.PI / 2);
+      borderPoints.push(new THREE.Vector3(
+        -hw + cornerRadius + Math.cos(angle) * cornerRadius,
+        0,
+        hh - cornerRadius + Math.sin(angle) * cornerRadius
+      ));
+    }
+    borderPoints.push(new THREE.Vector3(-hw + cornerRadius, 0, hh)); // Close the loop
     
-    // Left and right borders
-    const vBorderGeom = new THREE.PlaneGeometry(borderThickness, this.tableHeight);
-    const leftBorder = new THREE.Mesh(vBorderGeom, borderMat);
-    leftBorder.rotation.x = -Math.PI / 2;
-    leftBorder.position.set(-this.tableWidth / 2, 0.001, 0);
-    this.scene.add(leftBorder);
+    // Create tube geometry for the border
+    const borderCurve = new THREE.CatmullRomCurve3(borderPoints, true);
+    const borderGeom = new THREE.TubeGeometry(borderCurve, 100, borderThickness / 2, 8, true);
+    const border = new THREE.Mesh(borderGeom, borderMat);
+    border.position.y = 0.001;
+    this.scene.add(border);
     
-    const rightBorder = new THREE.Mesh(vBorderGeom, borderMat);
-    rightBorder.rotation.x = -Math.PI / 2;
-    rightBorder.position.set(this.tableWidth / 2, 0.001, 0);
-    this.scene.add(rightBorder);
+    this.cornerRadius = cornerRadius; // Store for collision detection
 
     const lineMat = new THREE.MeshBasicMaterial({ color: 0x64748b });
     const centerLineGeom = new THREE.PlaneGeometry(this.tableWidth, 0.02);
@@ -238,12 +290,41 @@ export class AirHockeyEngine {
   _clampPaddlePosition(paddle, isBlue) {
     const halfW = this.tableWidth / 2 - this.paddleRadius;
     const halfH = this.tableHeight / 2 - this.paddleRadius;
+    const cr = this.cornerRadius || 1.0;
+    
     paddle.position.x = Math.max(-halfW, Math.min(halfW, paddle.position.x));
 
     if (isBlue) {
       paddle.position.z = Math.max(0, Math.min(halfH, paddle.position.z));
     } else {
       paddle.position.z = Math.max(-halfH, Math.min(0, paddle.position.z));
+    }
+    
+    // Enforce rounded corner boundaries
+    const corners = [
+      { cx: halfW - cr + this.paddleRadius, cz: halfH - cr + this.paddleRadius },
+      { cx: -halfW + cr - this.paddleRadius, cz: halfH - cr + this.paddleRadius },
+      { cx: halfW - cr + this.paddleRadius, cz: -halfH + cr - this.paddleRadius },
+      { cx: -halfW + cr - this.paddleRadius, cz: -halfH + cr - this.paddleRadius }
+    ];
+    
+    for (const corner of corners) {
+      const inCornerX = (corner.cx > 0 && paddle.position.x > corner.cx) || (corner.cx < 0 && paddle.position.x < corner.cx);
+      const inCornerZ = (corner.cz > 0 && paddle.position.z > corner.cz) || (corner.cz < 0 && paddle.position.z < corner.cz);
+      
+      if (inCornerX && inCornerZ) {
+        const dx = paddle.position.x - corner.cx;
+        const dz = paddle.position.z - corner.cz;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        const maxDist = cr - this.paddleRadius;
+        
+        if (dist > maxDist) {
+          const nx = dx / dist;
+          const nz = dz / dist;
+          paddle.position.x = corner.cx + nx * maxDist;
+          paddle.position.z = corner.cz + nz * maxDist;
+        }
+      }
     }
 
     // Enforce goal crease zones - push paddle out if inside the half-circle
@@ -343,23 +424,67 @@ export class AirHockeyEngine {
     const halfW = this.tableWidth / 2;
     const halfH = this.tableHeight / 2;
     const goalWidth = 4.0;
+    const cr = this.cornerRadius || 1.0;
 
     for (let i = this.pucks.length - 1; i >= 0; i--) {
         const p = this.pucks[i];
+        const px = p.mesh.position.x;
+        const pz = p.mesh.position.z;
         
-        // Wall Collisions (X)
-        if (p.mesh.position.x <= -halfW + this.puckRadius) {
-            p.mesh.position.x = -halfW + this.puckRadius;
-            p.velocity.x *= -1;
+        // Check corner collisions first
+        const corners = [
+            { cx: halfW - cr, cz: halfH - cr },   // bottom-right
+            { cx: -halfW + cr, cz: halfH - cr },  // bottom-left
+            { cx: halfW - cr, cz: -halfH + cr },  // top-right
+            { cx: -halfW + cr, cz: -halfH + cr }  // top-left
+        ];
+        
+        let cornerHit = false;
+        for (const corner of corners) {
+            // Check if puck is in corner region
+            const inCornerX = (corner.cx > 0 && px > corner.cx) || (corner.cx < 0 && px < corner.cx);
+            const inCornerZ = (corner.cz > 0 && pz > corner.cz) || (corner.cz < 0 && pz < corner.cz);
+            
+            if (inCornerX && inCornerZ) {
+                const dx = px - corner.cx;
+                const dz = pz - corner.cz;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                
+                if (dist > cr - this.puckRadius) {
+                    // Puck hit the corner curve
+                    const nx = dx / dist;
+                    const nz = dz / dist;
+                    
+                    // Push puck back inside
+                    p.mesh.position.x = corner.cx + nx * (cr - this.puckRadius);
+                    p.mesh.position.z = corner.cz + nz * (cr - this.puckRadius);
+                    
+                    // Reflect velocity off the curved surface
+                    const dot = p.velocity.x * nx + p.velocity.y * nz;
+                    p.velocity.x -= 2 * dot * nx;
+                    p.velocity.y -= 2 * dot * nz;
+                    
+                    cornerHit = true;
+                    break;
+                }
+            }
         }
-        if (p.mesh.position.x >= halfW - this.puckRadius) {
-            p.mesh.position.x = halfW - this.puckRadius;
-            p.velocity.x *= -1;
+        
+        if (!cornerHit) {
+            // Wall Collisions (X) - only in non-corner regions
+            if (px <= -halfW + this.puckRadius && Math.abs(pz) < halfH - cr) {
+                p.mesh.position.x = -halfW + this.puckRadius;
+                p.velocity.x *= -1;
+            }
+            if (px >= halfW - this.puckRadius && Math.abs(pz) < halfH - cr) {
+                p.mesh.position.x = halfW - this.puckRadius;
+                p.velocity.x *= -1;
+            }
         }
 
         // Goal / End Wall Collisions (Z)
-        if (p.mesh.position.z <= -halfH + this.puckRadius) {
-            if (Math.abs(p.mesh.position.x) < goalWidth / 2) {
+        if (pz <= -halfH + this.puckRadius) {
+            if (Math.abs(px) < goalWidth / 2) {
                 this.blueScore++;
                 this.onScore?.(this.blueScore, this.redScore);
                 // Remove this puck
@@ -371,14 +496,14 @@ export class AirHockeyEngine {
                     this.resetPuck(1);
                 }
                 continue;
-            } else {
+            } else if (Math.abs(px) < halfW - cr) {
                 p.mesh.position.z = -halfH + this.puckRadius;
                 p.velocity.y *= -1;
             }
         }
 
-        if (p.mesh.position.z >= halfH - this.puckRadius) {
-            if (Math.abs(p.mesh.position.x) < goalWidth / 2) {
+        if (pz >= halfH - this.puckRadius) {
+            if (Math.abs(px) < goalWidth / 2) {
                 this.redScore++;
                 this.onScore?.(this.blueScore, this.redScore);
                 // Remove this puck
@@ -389,7 +514,7 @@ export class AirHockeyEngine {
                     this.resetPuck(-1);
                 }
                 continue;
-            } else {
+            } else if (Math.abs(px) < halfW - cr) {
                 p.mesh.position.z = halfH - this.puckRadius;
                 p.velocity.y *= -1;
             }
