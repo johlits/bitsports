@@ -18,7 +18,7 @@ engine = new AirHockeyEngine({
     scoreEl.innerHTML = `<span class="score-blue">Blue ${blue}</span><span class="score-sep">:</span><span class="score-red">${red} Red</span>`;
   },
   blueAI: allAIs[0],
-  redAI: allAIs[0],
+  redAI: allAIs[1] || allAIs[0],
 });
 
 function populateAISelect(select) {
@@ -32,6 +32,10 @@ function populateAISelect(select) {
 
 populateAISelect(blueSelect);
 populateAISelect(redSelect);
+
+// Select first AI for blue, second for red
+blueSelect.selectedIndex = 0;
+redSelect.selectedIndex = allAIs.length > 1 ? 1 : 0;
 
 // UI collapse / expand for mobile
 if (ui && uiToggle) {
