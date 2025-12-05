@@ -15,6 +15,7 @@ export class AirHockeyEngine {
 
     this.maxPaddleSpeed = 6; // units/sec
     this.puckFriction = 0.997;
+    this.minPuckSpeed = 0.5; // minimum speed so pucks never fully stop
 
     this.lastTime = 0;
     this.blueScore = 0;
@@ -692,6 +693,16 @@ export class AirHockeyEngine {
         p.mesh.position.x += p.velocity.x * delta;
         p.mesh.position.z += p.velocity.y * delta;
         p.velocity.multiplyScalar(this.puckFriction);
+        
+        // Enforce minimum speed so pucks never fully stop
+        const speed = p.velocity.length();
+        if (speed < this.minPuckSpeed && speed > 0) {
+            p.velocity.normalize().multiplyScalar(this.minPuckSpeed);
+        } else if (speed === 0) {
+            // If completely stopped, give a random direction
+            const angle = Math.random() * Math.PI * 2;
+            p.velocity.set(Math.cos(angle) * this.minPuckSpeed, Math.sin(angle) * this.minPuckSpeed);
+        }
     }
     
     // Spawning logic: add a new puck every 15 seconds, up to 10 pucks

@@ -60,8 +60,11 @@ Paddles are automatically pushed out if they enter the crease zone. This prevent
 | Puck Radius | 0.25 units |
 | Initial Speed | 3 units/second |
 | Friction | 0.997 (multiplied per frame) |
+| Minimum Speed | 0.5 units/second |
 | Max Pucks | 10 |
 | Spawn Interval | 15 seconds |
+
+**Important**: Pucks never fully stop. When friction would slow a puck below the minimum speed (0.5 units/second), the puck is boosted back to minimum speed while maintaining its direction. If a puck ever reaches exactly zero velocity, it receives a random direction at minimum speed.
 
 ### Puck Spawning
 
@@ -82,6 +85,11 @@ Paddles are automatically pushed out if they enter the crease zone. This prevent
 - Paddle velocity influences puck speed (faster paddle hits = faster puck)
 - Minimum puck speed after hit: 0.5 units/second
 - Maximum puck speed after hit: 15 units/second
+
+### Puck-Puck Collisions
+- Elastic collision when pucks touch (distance < 2 × puck radius)
+- Equal mass assumed, so velocities are exchanged along collision normal
+- Newly spawned pucks briefly ignore puck-puck collisions until clear of overlap
 
 ## AI Interface
 
