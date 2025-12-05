@@ -122,7 +122,7 @@ engine = new PaintEngine({
     updateScoreboard(players);
     alert(`${winner.ai?.name || `Player ${winner.id}`} wins with ${winner.score} tiles!`);
   },
-  playerAIs: allAIs.slice(0, 4),
+  playerAIs: allAIs.slice(0, 3),
   matchTime: 60,
 });
 
