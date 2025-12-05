@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <title>Bitsports - Paint Battle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #050816;
+        color: #f9fafb;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #ui {
+        position: fixed;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+        background: rgba(15, 23, 42, 0.9);
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        max-width: 280px;
+      }
+      #ui-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      #ui h1 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      #ui h1 a {
+        color: inherit;
+        text-decoration: none;
+      }
+      a {
+        color: #f9fafb;
+      }
+      #ui-toggle {
+        border: none;
+        background: rgba(15, 23, 42, 0.9);
+        color: #e5e7eb;
+        border-radius: 999px;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      #ui label {
+        display: block;
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+      }
+      #ui select, #ui button, #ui input {
+        margin-top: 0.25rem;
+        width: 100%;
+        font-size: 0.8rem;
+        background: #1e293b;
+        color: #f1f5f9;
+        border: 1px solid #334155;
+        border-radius: 0.375rem;
+        padding: 0.4rem 0.5rem;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      #ui select:hover, #ui button:hover {
+        background: #334155;
+      }
+      #ui select:focus, #ui button:focus, #ui input:focus {
+        outline: none;
+        border-color: #38bdf8;
+      }
+      #ui select option {
+        background: #1e293b;
+        color: #f1f5f9;
+      }
+      #timer {
+        margin-top: 0.5rem;
+        font-size: 1.5rem;
+        font-weight: 700;
+        text-align: center;
+        padding: 0.25rem;
+        color: #f1f5f9;
+      }
+      #scoreboard {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        padding: 0.5rem;
+        background: #0f172a;
+        border-radius: 0.375rem;
+      }
+      .score-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.2rem 0;
+      }
+      .score-row .player-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 0.5rem;
+      }
+      .score-row .player-name {
+        flex: 1;
+      }
+      .score-row .player-score {
+        font-weight: 600;
+        min-width: 40px;
+        text-align: right;
+      }
+      .player-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+      .player-row select {
+        flex: 1;
+        margin-top: 0;
+      }
+      .player-color {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid #334155;
+        flex-shrink: 0;
+      }
+      #ui.collapsed {
+        padding: 0.35rem 0.6rem;
+      }
+      #ui.collapsed #ui-body {
+        display: none;
+      }
+      #ui.collapsed h1 {
+        font-size: 0.85rem;
+      }
+      #ui.collapsed #ui-toggle {
+        font-size: 0.7rem;
+      }
+      @media (max-width: 640px) {
+        #ui {
+          max-width: 220px;
+        }
+      }
+      #canvas-container {
+        width: 100vw;
+        height: 100vh;
+      }
+      .settings-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+      }
+      .settings-row label {
+        flex: 1;
+        margin-top: 0;
+      }
+      .settings-row input {
+        width: 60px;
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div id="ui-header">
+        <h1><a href="https://github.com/johlits/bitsports" target="_blank">Paint Battle</a></h1>
+        <button id="ui-toggle" type="button">Hide</button>
+      </div>
+      <div id="ui-body">
+        <div class="settings-row">
+          <label>Time (s)<input type="number" id="match-time" value="60" min="10" max="300" /></label>
+          <label>Players<input type="number" id="player-count" value="4" min="2" max="8" /></label>
+        </div>
+
+        <div id="player-selects"></div>
+
+        <button id="start-btn">Start Match</button>
+        
+        <div id="timer">60</div>
+        <div id="scoreboard"></div>
+      </div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
