@@ -192,6 +192,11 @@ export class PaintEngine {
     };
   }
 
+  _snapToTileCenter(worldX, worldZ) {
+    const g = this._worldToGrid(worldX, worldZ);
+    return this._gridToWorld(g.x, g.y);
+  }
+
   _initPlayers() {
     // Clear existing players
     for (const p of this.players) {
@@ -201,17 +206,44 @@ export class PaintEngine {
 
     const numPlayers = this.playerAIs.length;
     const playerGeom = new THREE.CylinderGeometry(this.playerRadius, this.playerRadius, 0.3, 32);
+    const playerRingGeom = new THREE.RingGeometry(
+      this.playerRadius * 1.02,
+      this.playerRadius * 1.18,
+      32
+    );
 
     // Spawn positions - spread around the grid
     const spawnPositions = this._getSpawnPositions(numPlayers);
 
     for (let i = 0; i < numPlayers; i++) {
       const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
-      const mat = new THREE.MeshStandardMaterial({ color });
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.6,
+        roughness: 0.55,
+        metalness: 0.1,
+      });
       const mesh = new THREE.Mesh(playerGeom, mat);
+      mesh.renderOrder = 10;
+
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const ring = new THREE.Mesh(playerRingGeom, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.016;
+      ring.renderOrder = 11;
+      mesh.add(ring);
 
       const spawn = spawnPositions[i];
-      mesh.position.set(spawn.x, 0.15, spawn.z);
+      const centered = this._snapToTileCenter(spawn.x, spawn.z);
+      mesh.position.set(centered.x, 0.2, centered.z);
 
       this.scene.add(mesh);
 
@@ -331,7 +363,23 @@ export class PaintEngine {
       emissiveIntensity: 0.5,
     });
     const mesh = new THREE.Mesh(geometry, mat);
-    mesh.position.set(worldPos.x, 0.25, worldPos.z);
+    mesh.position.set(worldPos.x, 0.32, worldPos.z);
+    mesh.renderOrder = 8;
+
+    // Outline / border for better visibility
+    const outlineGeom = geometry.clone();
+    outlineGeom.scale(1.25, 1.25, 1.25);
+    const outlineMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.65,
+      depthTest: false,
+      depthWrite: false,
+      wireframe: true,
+    });
+    const outline = new THREE.Mesh(outlineGeom, outlineMat);
+    outline.renderOrder = 9;
+    mesh.add(outline);
 
     this.scene.add(mesh);
     this.powerups.push({ mesh, type, gx, gy });
