@@ -6,10 +6,12 @@ import * as greedyAI from "./greedyAI.js";
 import * as hunterAI from "./hunterAI.js";
 import * as territoryAI from "./territoryAI.js";
 import * as human from "./humanAI.js";
+import * as gpt51CodexMaxLow from "./gpt51CodexMaxLowAI.js";
 
 export const allAIs = [
   claudeOpus45,
   gpt51High,
   geminiHigh,
+  gpt51CodexMaxLow,
   human,
 ];
