@@ -2,12 +2,12 @@ import * as geminiHigh from "./geminiHighAI.js";
 import * as gpt51High from "./gpt51HighAI.js";
 import * as claudeOpus45 from "./claudeOpus45AI.js";
 import * as human from "./humanAI.js";
-import * as gpt51CodexMaxLow from "./gpt51CodexMaxLowAI.js";
+import * as gpt52HighReasoning from "./gpt52HighReasoningAI.js";
 
-export const allAIs = [ 
+export const allAIs = [
+    gpt52HighReasoning,
     claudeOpus45,
     geminiHigh,
     gpt51High,
-    gpt51CodexMaxLow,
     human,
 ];

@@ -1,17 +1,13 @@
 import * as claudeOpus45 from "./claudeOpus45AI.js";
+import * as gpt52HighReasoning from "./gpt52HighReasoningAI.js";
 import * as gpt51High from "./gpt51HighAI.js";
 import * as geminiHigh from "./geminiHighAI.js";
-import * as randomAI from "./randomAI.js";
-import * as greedyAI from "./greedyAI.js";
-import * as hunterAI from "./hunterAI.js";
-import * as territoryAI from "./territoryAI.js";
 import * as human from "./humanAI.js";
-import * as gpt51CodexMaxLow from "./gpt51CodexMaxLowAI.js";
 
 export const allAIs = [
+  gpt52HighReasoning,
   claudeOpus45,
-  gpt51High,
   geminiHigh,
-  gpt51CodexMaxLow,
+  gpt51High,
   human,
 ];
