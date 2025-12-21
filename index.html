@@ -85,6 +85,7 @@
         <nav>
             <a onclick="loadPage('air-hockey', this)">Air Hockey</a>
             <a onclick="loadPage('paint', this)">Paint Battle</a>
+            <a onclick="loadPage('sneak', this)">🚧 Sneak</a>
         </nav>
     </div>
 
@@ -96,7 +97,8 @@
 <script>
 const GAMES = {
     'air-hockey': { url: 'air-hockey/index.html', navIndex: 0 },
-    'paint': { url: 'paint/index.html', navIndex: 1 }
+    'paint': { url: 'paint/index.html', navIndex: 1 },
+    'sneak': { url: 'sneak/index.html', navIndex: 2 }
 };
 
 function loadPage(gameKey, linkEl) {
