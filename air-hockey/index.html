@@ -121,6 +121,95 @@
         width: 100vw;
         height: 100vh;
       }
+      /* Cinematic Mode */
+      .cinematic-mode #ui {
+        display: none !important;
+      }
+      #cinematic-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 100;
+      }
+      .cinematic-mode #cinematic-overlay {
+        display: block;
+      }
+      #cinematic-score {
+        display: none;
+      }
+      #cinematic-blue-score {
+        position: absolute;
+        left: 2rem;
+        top: 15%;
+        color: #38bdf8;
+        font-size: 3rem;
+        font-weight: 700;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+      }
+      #cinematic-red-score {
+        position: absolute;
+        right: 2rem;
+        top: 15%;
+        color: #f97373;
+        font-size: 3rem;
+        font-weight: 700;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+      }
+      #cinematic-blue-name {
+        position: absolute;
+        left: 2rem;
+        top: 60%;
+        color: #38bdf8;
+        font-size: 1.5rem;
+        font-weight: 600;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: translateY(-50%) rotate(180deg);
+      }
+      #cinematic-red-name {
+        position: absolute;
+        right: 2rem;
+        top: 60%;
+        color: #f97373;
+        font-size: 1.5rem;
+        font-weight: 600;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: translateY(-50%);
+      }
+      #cinematic-hint {
+        position: absolute;
+        bottom: 1rem;
+        right: 1rem;
+        font-size: 0.75rem;
+        color: rgba(255,255,255,0.3);
+        display: none;
+      }
+      #cinematic-countdown {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 8rem;
+        font-weight: 700;
+        color: #fff;
+        text-shadow: 0 0 40px rgba(255,255,255,0.5), 0 4px 20px rgba(0,0,0,0.8);
+        display: none;
+      }
+      #cinematic-countdown.active {
+        display: block;
+        animation: countdownPulse 1s ease-in-out infinite;
+      }
+      @keyframes countdownPulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; }
+      }
     </style>
   </head>
   <body>
@@ -141,6 +230,16 @@
       </div>
     </div>
     <div id="canvas-container"></div>
+    
+    <!-- Cinematic Mode Overlay -->
+    <div id="cinematic-overlay">
+      <span id="cinematic-blue-score">0</span>
+      <span id="cinematic-blue-name">Blue AI</span>
+      <span id="cinematic-red-name">Red AI</span>
+      <span id="cinematic-red-score">0</span>
+      <div id="cinematic-countdown"></div>
+      <div id="cinematic-hint">Press C to exit</div>
+    </div>
 
     <script type="module" src="./main.js"></script>
   </body>

@@ -9,13 +9,96 @@ const startBtn = document.getElementById("start-btn");
 const scoreEl = document.getElementById("score");
 const container = document.getElementById("canvas-container");
 
+// Cinematic mode elements
+const cinematicBlueName = document.getElementById("cinematic-blue-name");
+const cinematicRedName = document.getElementById("cinematic-red-name");
+const cinematicBlueScore = document.getElementById("cinematic-blue-score");
+const cinematicRedScore = document.getElementById("cinematic-red-score");
+const cinematicCountdown = document.getElementById("cinematic-countdown");
+
 let engine = null;
+let cinematicMode = false;
+let countdownInterval = null;
+
+// Toggle cinematic mode with 'c' key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "c" || e.key === "C") {
+    if (!cinematicMode) {
+      // Enter cinematic mode with countdown
+      cinematicMode = true;
+      document.body.classList.add("cinematic-mode");
+      updateCinematicOverlay();
+      startCountdown();
+    } else {
+      // Exit cinematic mode
+      cinematicMode = false;
+      document.body.classList.remove("cinematic-mode");
+      clearCountdown();
+    }
+  }
+});
+
+function startCountdown() {
+  let count = 30;
+  cinematicCountdown.textContent = count;
+  cinematicCountdown.classList.add("active");
+  
+  countdownInterval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      cinematicCountdown.textContent = count;
+    } else {
+      // Countdown finished - reset and start game
+      clearCountdown();
+      resetAndStartGame();
+    }
+  }, 1000);
+}
+
+function clearCountdown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+  cinematicCountdown.classList.remove("active");
+  cinematicCountdown.textContent = "";
+}
+
+function resetAndStartGame() {
+  if (engine) {
+    engine.stop();
+  }
+  
+  // Reset scores
+  engine.blueScore = 0;
+  engine.redScore = 0;
+  
+  // Update displays
+  scoreEl.innerHTML = `<span class="score-blue">Blue 0</span><span class="score-sep">:</span><span class="score-red">0 Red</span>`;
+  cinematicBlueScore.textContent = "0";
+  cinematicRedScore.textContent = "0";
+  
+  // Start the game
+  engine.start();
+}
+
+function updateCinematicOverlay() {
+  if (engine) {
+    cinematicBlueName.textContent = engine.blueAI?.name || "Blue AI";
+    cinematicRedName.textContent = engine.redAI?.name || "Red AI";
+    cinematicBlueScore.textContent = engine.blueScore;
+    cinematicRedScore.textContent = engine.redScore;
+  }
+}
 
 // Create engine immediately to show board preview
 engine = new AirHockeyEngine({
   container,
   onScore: (blue, red) => {
     scoreEl.innerHTML = `<span class="score-blue">Blue ${blue}</span><span class="score-sep">:</span><span class="score-red">${red} Red</span>`;
+    // Update cinematic overlay
+    cinematicBlueScore.textContent = blue;
+    cinematicRedScore.textContent = red;
   },
   blueAI: allAIs[0],
   redAI: allAIs[1] || allAIs[0],
@@ -68,6 +151,12 @@ startBtn.addEventListener("click", () => {
   engine.redAI = redAI;
   engine.blueScore = 0;
   engine.redScore = 0;
+
+  // Update cinematic overlay with new AI names and reset scores
+  cinematicBlueName.textContent = blueAI.name || "Blue AI";
+  cinematicRedName.textContent = redAI.name || "Red AI";
+  cinematicBlueScore.textContent = "0";
+  cinematicRedScore.textContent = "0";
 
   engine.start();
 });
