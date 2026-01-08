@@ -11,8 +11,128 @@ const matchTimeInput = document.getElementById("match-time");
 const playerCountInput = document.getElementById("player-count");
 const container = document.getElementById("canvas-container");
 
+// Cinematic mode elements
+const cinematicCountdown = document.getElementById("cinematic-countdown");
+
+// Victory screen elements
+const victoryOverlay = document.getElementById("victory-overlay");
+const victoryWinner = document.getElementById("victory-winner");
+const victoryList = document.getElementById("victory-list");
+const victoryPlayAgain = document.getElementById("victory-play-again");
+const victoryClose = document.getElementById("victory-close");
+
 let engine = null;
 let playerSelects = [];
+let cinematicMode = false;
+let countdownInterval = null;
+
+// Toggle cinematic mode with 'c' key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "c" || e.key === "C") {
+    if (!cinematicMode) {
+      // Enter cinematic mode with countdown
+      cinematicMode = true;
+      document.body.classList.add("cinematic-mode");
+      if (engine) {
+        engine.setCinematicMode(true);
+      }
+      startCountdown();
+    } else {
+      // Exit cinematic mode
+      cinematicMode = false;
+      document.body.classList.remove("cinematic-mode");
+      if (engine) {
+        engine.setCinematicMode(false);
+      }
+      clearCountdown();
+    }
+  }
+});
+
+function startCountdown() {
+  let count = 30;
+  cinematicCountdown.textContent = count;
+  cinematicCountdown.classList.add("active");
+  
+  countdownInterval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      cinematicCountdown.textContent = count;
+    } else {
+      // Countdown finished - reset and start game
+      clearCountdown();
+      resetAndStartGame();
+    }
+  }, 1000);
+}
+
+function clearCountdown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+  cinematicCountdown.classList.remove("active");
+  cinematicCountdown.textContent = "";
+}
+
+function resetAndStartGame() {
+  if (!engine) return;
+  
+  // Hide victory screen if visible
+  victoryOverlay.classList.remove("active");
+  
+  const matchTime = Math.max(10, Math.min(300, parseInt(matchTimeInput.value) || 60));
+  const selectedAIs = playerSelects.map((select) => getAIById(select.value));
+  
+  engine.stop();
+  timerEl.textContent = formatTime(matchTime);
+  scoreboardEl.innerHTML = "";
+  
+  engine.setPlayerAIs(selectedAIs);
+  engine.setMatchTime(matchTime);
+  engine.start();
+  
+  // Preserve cinematic mode state
+  if (cinematicMode) {
+    engine.setCinematicMode(true);
+  }
+}
+
+function showVictoryScreen(players, winner) {
+  // Set winner text
+  const winnerName = winner.ai?.name || `Player ${winner.id}`;
+  victoryWinner.innerHTML = `<span class="winner-name">${winnerName}</span> wins with <span class="winner-score">${winner.score}</span> tiles!`;
+  
+  // Sort players by score
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  
+  // Build standings list
+  victoryList.innerHTML = sorted.map((p, i) => {
+    const rankClass = i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : "";
+    const name = p.ai?.name || `Player ${p.id}`;
+    return `
+      <div class="victory-row">
+        <span class="victory-rank ${rankClass}">#${i + 1}</span>
+        <div class="victory-color" style="background-color: ${p.colorHex}"></div>
+        <span class="victory-name">${name}</span>
+        <span class="victory-score">${p.score}</span>
+      </div>
+    `;
+  }).join("");
+  
+  // Show overlay
+  victoryOverlay.classList.add("active");
+}
+
+// Victory screen button handlers
+victoryPlayAgain.addEventListener("click", () => {
+  victoryOverlay.classList.remove("active");
+  resetAndStartGame();
+});
+
+victoryClose.addEventListener("click", () => {
+  victoryOverlay.classList.remove("active");
+});
 
 // Player colors matching engine
 const PLAYER_COLORS = [
@@ -120,13 +240,16 @@ engine = new PaintEngine({
   onGameEnd: (players, winner) => {
     timerEl.textContent = "GAME OVER";
     updateScoreboard(players);
-    alert(`${winner.ai?.name || `Player ${winner.id}`} wins with ${winner.score} tiles!`);
+    showVictoryScreen(players, winner);
   },
   playerAIs: allAIs.slice(0, 3),
   matchTime: 60,
 });
 
 startBtn.addEventListener("click", () => {
+  // Hide victory screen if visible
+  victoryOverlay.classList.remove("active");
+  
   const matchTime = Math.max(10, Math.min(300, parseInt(matchTimeInput.value) || 60));
   matchTimeInput.value = matchTime;
 
@@ -143,4 +266,9 @@ startBtn.addEventListener("click", () => {
   engine.setPlayerAIs(selectedAIs);
   engine.setMatchTime(matchTime);
   engine.start();
+  
+  // Preserve cinematic mode state
+  if (cinematicMode) {
+    engine.setCinematicMode(true);
+  }
 });

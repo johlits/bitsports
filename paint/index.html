@@ -154,6 +154,170 @@
         width: 100vw;
         height: 100vh;
       }
+      /* Cinematic Mode */
+      .cinematic-mode #ui {
+        display: none !important;
+      }
+      #cinematic-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 100;
+      }
+      .cinematic-mode #cinematic-overlay {
+        display: block;
+      }
+      #cinematic-countdown {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 8rem;
+        font-weight: 900;
+        color: white;
+        text-shadow: 0 0 40px rgba(255,255,255,0.5), 0 4px 20px rgba(0,0,0,0.8);
+        display: none;
+      }
+      #cinematic-countdown.active {
+        display: block;
+        animation: countdownPulse 1s ease-in-out infinite;
+      }
+      @keyframes countdownPulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; }
+      }
+      #cinematic-hint {
+        position: absolute;
+        bottom: 1rem;
+        right: 1rem;
+        font-size: 0.9rem;
+        color: rgba(255,255,255,0.3);
+        display: none;
+      }
+      /* Victory Screen */
+      #victory-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 200;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        animation: fadeIn 0.5s ease-out;
+      }
+      #victory-overlay.active {
+        display: flex;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      #victory-title {
+        font-size: 3rem;
+        font-weight: 900;
+        color: #fbbf24;
+        text-shadow: 0 0 30px rgba(251, 191, 36, 0.5), 0 4px 20px rgba(0,0,0,0.8);
+        margin-bottom: 1rem;
+        animation: victoryPulse 2s ease-in-out infinite;
+      }
+      @keyframes victoryPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      #victory-winner {
+        font-size: 2rem;
+        font-weight: 700;
+        color: white;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        margin-bottom: 2rem;
+      }
+      #victory-winner .winner-name {
+        color: #4ade80;
+      }
+      #victory-winner .winner-score {
+        color: #fbbf24;
+      }
+      #victory-standings {
+        background: rgba(30, 41, 59, 0.9);
+        border-radius: 1rem;
+        padding: 1.5rem 2rem;
+        min-width: 300px;
+        max-width: 400px;
+        margin-bottom: 2rem;
+      }
+      #victory-standings h3 {
+        margin: 0 0 1rem 0;
+        font-size: 1.2rem;
+        color: #94a3b8;
+        text-align: center;
+      }
+      .victory-row {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      .victory-row:last-child {
+        border-bottom: none;
+      }
+      .victory-rank {
+        width: 30px;
+        font-weight: 700;
+        color: #64748b;
+      }
+      .victory-rank.gold { color: #fbbf24; }
+      .victory-rank.silver { color: #94a3b8; }
+      .victory-rank.bronze { color: #cd7f32; }
+      .victory-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        margin-right: 0.75rem;
+      }
+      .victory-name {
+        flex: 1;
+        font-weight: 600;
+        color: #f1f5f9;
+      }
+      .victory-score {
+        font-weight: 700;
+        color: #fbbf24;
+        min-width: 50px;
+        text-align: right;
+      }
+      #victory-buttons {
+        display: flex;
+        gap: 1rem;
+      }
+      #victory-buttons button {
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #victory-buttons button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      }
+      #victory-play-again {
+        background: linear-gradient(135deg, #4ade80, #22c55e);
+        color: white;
+      }
+      #victory-close {
+        background: #334155;
+        color: #f1f5f9;
+      }
       .settings-row {
         display: flex;
         gap: 0.5rem;
@@ -190,6 +354,26 @@
       </div>
     </div>
     <div id="canvas-container"></div>
+
+    <!-- Cinematic Mode Overlay -->
+    <div id="cinematic-overlay">
+      <div id="cinematic-countdown"></div>
+      <div id="cinematic-hint">Press C to exit</div>
+    </div>
+
+    <!-- Victory Screen Overlay -->
+    <div id="victory-overlay">
+      <div id="victory-title">GAME OVER</div>
+      <div id="victory-winner"></div>
+      <div id="victory-standings">
+        <h3>Final Standings</h3>
+        <div id="victory-list"></div>
+      </div>
+      <div id="victory-buttons">
+        <button id="victory-play-again">Play Again</button>
+        <button id="victory-close">Close</button>
+      </div>
+    </div>
 
     <script type="module" src="./main.js"></script>
   </body>

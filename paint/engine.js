@@ -1,4 +1,5 @@
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+import * as THREE from "https://esm.sh/three@0.160.0";
+import { CSS2DRenderer, CSS2DObject } from "https://esm.sh/three@0.160.0/examples/jsm/renderers/CSS2DRenderer.js";
 
 // Player colors - vibrant and distinct
 const PLAYER_COLORS = [
@@ -42,6 +43,9 @@ export class PaintEngine {
     this.lastPowerupSpawn = 0;
     this.maxPowerups = 5;
 
+    // Cinematic mode
+    this.cinematicMode = false;
+
     this._initThree();
     this._initScene();
   }
@@ -73,6 +77,15 @@ export class PaintEngine {
     this.container.innerHTML = "";
     this.container.appendChild(this.renderer.domElement);
 
+    // CSS2D renderer for player labels in cinematic mode
+    this.labelRenderer = new CSS2DRenderer();
+    this.labelRenderer.setSize(width, height);
+    this.labelRenderer.domElement.style.position = "absolute";
+    this.labelRenderer.domElement.style.top = "0";
+    this.labelRenderer.domElement.style.left = "0";
+    this.labelRenderer.domElement.style.pointerEvents = "none";
+    this.container.appendChild(this.labelRenderer.domElement);
+
     window.addEventListener("resize", () => this._onResize());
   }
 
@@ -88,6 +101,7 @@ export class PaintEngine {
     this.camera.bottom = -viewSize;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.labelRenderer.setSize(width, height);
   }
 
   _initScene() {
@@ -172,6 +186,7 @@ export class PaintEngine {
   _renderPreview() {
     if (!this._previewMode) return;
     this.renderer.render(this.scene, this.camera);
+    this.labelRenderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this._renderPreview());
   }
 
@@ -198,8 +213,21 @@ export class PaintEngine {
   }
 
   _initPlayers() {
-    // Clear existing players
+    // Clear existing players and their labels
     for (const p of this.players) {
+      // Remove labels from mesh first
+      if (p.nameLabel) {
+        p.mesh.remove(p.nameLabel);
+        if (p.nameLabelDiv && p.nameLabelDiv.parentNode) {
+          p.nameLabelDiv.parentNode.removeChild(p.nameLabelDiv);
+        }
+      }
+      if (p.scoreLabel) {
+        p.mesh.remove(p.scoreLabel);
+        if (p.scoreLabelDiv && p.scoreLabelDiv.parentNode) {
+          p.scoreLabelDiv.parentNode.removeChild(p.scoreLabelDiv);
+        }
+      }
       this.scene.remove(p.mesh);
     }
     this.players = [];
@@ -247,6 +275,40 @@ export class PaintEngine {
 
       this.scene.add(mesh);
 
+      // Create name label (above player - negative Z in top-down view)
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "player-label player-name-label";
+      nameDiv.textContent = this.playerAIs[i]?.name || `Player ${i + 1}`;
+      nameDiv.style.cssText = `
+        color: white;
+        font-family: system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        white-space: nowrap;
+        display: ${this.cinematicMode ? "block" : "none"};
+      `;
+      const nameLabel = new CSS2DObject(nameDiv);
+      nameLabel.position.set(0, 0.5, -0.6);
+      mesh.add(nameLabel);
+
+      // Create score label (below player - positive Z in top-down view)
+      const scoreDiv = document.createElement("div");
+      scoreDiv.className = "player-label player-score-label";
+      scoreDiv.textContent = "0";
+      scoreDiv.style.cssText = `
+        color: #${color.toString(16).padStart(6, "0")};
+        font-family: system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 900;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+        white-space: nowrap;
+        display: ${this.cinematicMode ? "block" : "none"};
+      `;
+      const scoreLabel = new CSS2DObject(scoreDiv);
+      scoreLabel.position.set(0, 0.5, 0.6);
+      mesh.add(scoreLabel);
+
       this.players.push({
         mesh,
         velocity: new THREE.Vector2(0, 0),
@@ -260,6 +322,10 @@ export class PaintEngine {
           shield: 0,
           paintBomb: 0,
         },
+        nameLabel,
+        scoreLabel,
+        nameLabelDiv: nameDiv,
+        scoreLabelDiv: scoreDiv,
       });
     }
   }
@@ -467,6 +533,7 @@ export class PaintEngine {
 
     const state = {
       self: {
+        id: player.id,
         x: player.mesh.position.x,
         z: player.mesh.position.z,
         gridX: gridPos.x,
@@ -545,6 +612,13 @@ export class PaintEngine {
         }
       }
     }
+
+    // Update score labels for cinematic mode
+    for (const player of this.players) {
+      if (player.scoreLabelDiv) {
+        player.scoreLabelDiv.textContent = player.score;
+      }
+    }
   }
 
   setPlayerAIs(ais) {
@@ -553,6 +627,24 @@ export class PaintEngine {
 
   setMatchTime(time) {
     this.matchTime = time;
+  }
+
+  setCinematicMode(enabled) {
+    this.cinematicMode = enabled;
+    this._updateLabelVisibility();
+  }
+
+  _updateLabelVisibility() {
+    // Toggle visibility of player labels based on cinematicMode
+    const display = this.cinematicMode ? "block" : "none";
+    for (const player of this.players) {
+      if (player.nameLabelDiv) {
+        player.nameLabelDiv.style.display = display;
+      }
+      if (player.scoreLabelDiv) {
+        player.scoreLabelDiv.style.display = display;
+      }
+    }
   }
 
   start() {
@@ -564,6 +656,9 @@ export class PaintEngine {
     this._resetGrid();
     this._clearPowerups();
     this._initPlayers();
+    
+    // Ensure labels are in correct visibility state
+    this._updateLabelVisibility();
 
     this.lastTime = performance.now();
 
@@ -575,6 +670,7 @@ export class PaintEngine {
 
       this.update(dt);
       this.renderer.render(this.scene, this.camera);
+      this.labelRenderer.render(this.scene, this.camera);
 
       if (this.gameRunning) {
         this.rafId = requestAnimationFrame(loop);
