@@ -286,7 +286,7 @@ export class PaintEngine {
         font-weight: 700;
         text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         white-space: nowrap;
-        display: ${this.cinematicMode ? "block" : "none"};
+        visibility: ${this.cinematicMode ? "visible" : "hidden"};
       `;
       const nameLabel = new CSS2DObject(nameDiv);
       nameLabel.position.set(0, 0.5, -0.6);
@@ -303,7 +303,7 @@ export class PaintEngine {
         font-weight: 900;
         text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         white-space: nowrap;
-        display: ${this.cinematicMode ? "block" : "none"};
+        visibility: ${this.cinematicMode ? "visible" : "hidden"};
       `;
       const scoreLabel = new CSS2DObject(scoreDiv);
       scoreLabel.position.set(0, 0.5, 0.6);
@@ -636,13 +636,13 @@ export class PaintEngine {
 
   _updateLabelVisibility() {
     // Toggle visibility of player labels based on cinematicMode
-    const display = this.cinematicMode ? "block" : "none";
+    const visibility = this.cinematicMode ? "visible" : "hidden";
     for (const player of this.players) {
       if (player.nameLabelDiv) {
-        player.nameLabelDiv.style.display = display;
+        player.nameLabelDiv.style.visibility = visibility;
       }
       if (player.scoreLabelDiv) {
-        player.scoreLabelDiv.style.display = display;
+        player.scoreLabelDiv.style.visibility = visibility;
       }
     }
   }
