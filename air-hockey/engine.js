@@ -42,7 +42,7 @@ export class AirHockeyEngine {
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     // Higher, more top-down view so the full board sits higher in the viewport
-    this.camera.position.set(0, 25, 1);
+    this.camera.position.set(0, 28, 0);
     this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
