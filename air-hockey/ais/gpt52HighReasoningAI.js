@@ -7,6 +7,9 @@ const GOAL_WIDTH = 4.0;
 const GOAL_CREASE_RADIUS = 2.5;
 const PADDLE_RADIUS = 0.35;
 const PUCK_RADIUS = 0.25;
+ const MAX_PADDLE_SPEED = 6;
+ const FRICTION = 0.997;
+ const MIN_PUCK_SPEED = 0.5;
 
 const HALF_W = TABLE_WIDTH / 2;
 const HALF_H = TABLE_HEIGHT / 2;
@@ -54,70 +57,129 @@ function getCreaseEdgePosition(predX, isBlue) {
   return { x: edgeX, z: edgeZ };
 }
 
-function predictXAtZ(puck, targetZ) {
-  const vx = puck.velocity?.x ?? 0;
-  const vz = puck.velocity?.y ?? 0;
-
-  if (Math.abs(vz) < 0.001) return puck.x;
-  const t = (targetZ - puck.y) / vz;
-  if (t <= 0) return puck.x;
-
-  let x = puck.x + vx * t;
-  const halfW = HALF_W - PUCK_RADIUS;
-
-  let bounces = 0;
-  while ((x > halfW || x < -halfW) && bounces < 12) {
-    if (x > halfW) x = 2 * halfW - x;
-    else if (x < -halfW) x = -2 * halfW - x;
-    bounces++;
-  }
-
-  return clamp(x, -halfW, halfW);
-}
-
-function timeToZ(puck, targetZ) {
-  const vz = puck.velocity?.y ?? 0;
-  if (Math.abs(vz) < 0.001) return Infinity;
-
-  const t = (targetZ - puck.y) / vz;
-  return t > 0 ? t : Infinity;
-}
-
 function puckSpeed(puck) {
   const vx = puck.velocity?.x ?? 0;
   const vz = puck.velocity?.y ?? 0;
   return Math.hypot(vx, vz);
 }
 
-function isMovingTowardsGoal(puck, isBlue) {
+function isMovingTowardsMyGoal(puck, isBlue) {
   const vz = puck.velocity?.y ?? 0;
-  return isBlue ? vz > 0 : vz < 0;
+  return isBlue ? vz > 0.1 : vz < -0.1;
+}
+
+function simulatePuckPath(puck, maxTime, dt) {
+  const path = [];
+  let x = puck.x;
+  let z = puck.y;
+  let vx = puck.velocity?.x ?? 0;
+  let vz = puck.velocity?.y ?? 0;
+  const wallX = HALF_W - PUCK_RADIUS;
+  const wallZ = HALF_H - PUCK_RADIUS;
+
+  for (let t = 0; t < maxTime; t += dt) {
+    const speed = Math.hypot(vx, vz);
+    if (speed > MIN_PUCK_SPEED) {
+      vx *= FRICTION;
+      vz *= FRICTION;
+    }
+
+    x += vx * dt;
+    z += vz * dt;
+
+    if (x > wallX) {
+      x = 2 * wallX - x;
+      vx = -vx;
+    } else if (x < -wallX) {
+      x = -2 * wallX - x;
+      vx = -vx;
+    }
+
+    if (z > wallZ) {
+      if (Math.abs(x) > GOAL_WIDTH / 2) {
+        z = 2 * wallZ - z;
+        vz = -vz;
+      }
+    } else if (z < -wallZ) {
+      if (Math.abs(x) > GOAL_WIDTH / 2) {
+        z = -2 * wallZ - z;
+        vz = -vz;
+      }
+    }
+
+    path.push({ x, z, vx, vz, t: t + dt });
+  }
+
+  return path;
+}
+
+function predictAtZ(puck, targetZ, isBlue) {
+  const path = simulatePuckPath(puck, 2.6, 0.016);
+  for (const p of path) {
+    if (isBlue) {
+      if (p.z >= targetZ) return p;
+    } else {
+      if (p.z <= targetZ) return p;
+    }
+  }
+  return path.length ? path[path.length - 1] : { x: puck.x, z: puck.y, vx: 0, vz: 0, t: 0 };
+}
+
+function timeToReach(self, x, z) {
+  return Math.hypot(x - self.x, z - self.y) / MAX_PADDLE_SPEED;
+}
+
+function findBestIntercept(puck, self, isBlue) {
+  const path = simulatePuckPath(puck, 2.2, 0.016);
+  const zMin = isBlue ? 0 : -9.65;
+  const zMax = isBlue ? 9.65 : 0;
+  
+  let best = null;
+  let bestScore = -Infinity;
+
+  for (const p of path) {
+    if (p.z < zMin || p.z > zMax) continue;
+    const tReach = timeToReach(self, p.x, p.z);
+    if (tReach > p.t + 0.08) continue;
+
+    const distToGoal = isBlue ? (HALF_H - p.z) : (p.z + HALF_H);
+    const score = distToGoal * 3 - p.t * 14;
+    if (score > bestScore) {
+      bestScore = score;
+      best = p;
+    }
+  }
+
+  return best;
 }
 
 function assessThreat(puck, self, opponent, isBlue) {
   const myGoalZ = isBlue ? HALF_H : -HALF_H;
-  const movingTowardsMe = isMovingTowardsGoal(puck, isBlue);
+  const movingTowardsMe = isMovingTowardsMyGoal(puck, isBlue);
   const inMyHalf = isBlue ? puck.y > 0 : puck.y < 0;
-
   const speed = puckSpeed(puck);
-  const tGoal = movingTowardsMe ? timeToZ(puck, myGoalZ) : Infinity;
-  const distToGoal = Math.abs(myGoalZ - puck.y);
-  const predXAtGoal = predictXAtZ(puck, myGoalZ);
 
-  const onTarget = Math.abs(predXAtGoal) <= GOAL_WIDTH / 2;
+  const predAtGoal = movingTowardsMe ? predictAtZ(puck, myGoalZ, isBlue) : null;
+  const tGoal = predAtGoal ? predAtGoal.t : Infinity;
+  const predXAtGoal = predAtGoal ? predAtGoal.x : puck.x;
+  const onTarget = predAtGoal ? Math.abs(predXAtGoal) <= GOAL_WIDTH / 2 + 0.35 : false;
+  const distToGoalNow = Math.abs(myGoalZ - puck.y);
 
   let score = 0;
-  if (tGoal < Infinity) score += 120 / (tGoal + 0.08);
-  score += clamp(10 - distToGoal, -10, 10);
-  if (onTarget) score += 30;
-  if (inMyHalf) score += 10;
-  score += speed * 1.2;
+  if (tGoal < Infinity) score += 140 / (tGoal + 0.08);
+  if (onTarget) score += 45;
+  if (distToGoalNow < 5.0) score += 25;
+  if (distToGoalNow < 3.0) score += 35;
+  if (inMyHalf) score += 15;
+  score += speed * 4;
 
   const oppDist = Math.hypot(puck.x - opponent.x, puck.y - opponent.y);
-  if (!inMyHalf && oppDist < 2.0) score += 10;
+  if (!inMyHalf && oppDist < 2.0) score += 18;
 
   const selfDist = Math.hypot(puck.x - self.x, puck.y - self.y);
-  score += clamp(8 - selfDist, -8, 8) * 0.5;
+  score += clamp(7 - selfDist, -7, 7) * 1.2;
+
+  const intercept = movingTowardsMe ? findBestIntercept(puck, self, isBlue) : null;
 
   return {
     puck,
@@ -127,44 +189,47 @@ function assessThreat(puck, self, opponent, isBlue) {
     movingTowardsMe,
     inMyHalf,
     predXAtGoal,
+    onTarget,
+    intercept,
   };
 }
 
-function choosePrimaryThreat(pucks, self, opponent, isBlue) {
-  let best = null;
+function assessAllThreats(pucks, self, opponent, isBlue) {
+  const threats = [];
   for (const p of pucks) {
-    const t = assessThreat(p, self, opponent, isBlue);
-    if (!best || t.score > best.score) best = t;
+    threats.push(assessThreat(p, self, opponent, isBlue));
   }
-  return best;
+  threats.sort((a, b) => b.score - a.score);
+  return threats;
 }
 
-function chooseOffenseCandidate(pucks, self, isBlue) {
+function chooseOffenseCandidate(threats, self, isBlue) {
   let best = null;
-  for (const p of pucks) {
+  for (const t of threats) {
+    const p = t.puck;
     const inMyHalf = isBlue ? p.y > 0 : p.y < 0;
     if (!inMyHalf) continue;
-
-    const speed = puckSpeed(p);
-    if (speed > 4.2) continue;
+    if (t.movingTowardsMe && t.tGoal < 1.4) continue;
+    if (t.speed > 3.8) continue;
 
     const dist = Math.hypot(p.x - self.x, p.y - self.y);
-    if (dist > 6.2) continue;
+    if (dist > 6.0) continue;
 
-    const vz = p.velocity?.y ?? 0;
-    if (isBlue ? vz > 0.2 : vz < -0.2) continue;
-
-    const value = (6.2 - dist) + (4.2 - speed);
+    const value = (6.0 - dist) + (3.8 - t.speed) + (t.movingTowardsMe ? -1 : 1);
     if (!best || value > best.value) best = { puck: p, value };
   }
-  return best?.puck ?? null;
+  return best ? best.puck : null;
+}
+
+function shotTargetX(opponentX) {
+  const x = opponentX >= 0 ? -1.7 : 1.7;
+  return clamp(x, -(GOAL_WIDTH / 2 - 0.1), (GOAL_WIDTH / 2 - 0.1));
 }
 
 function calculateApproachBehindPuck(puck, targetX, targetZ) {
   const aimX = targetX - puck.x;
   const aimZ = targetZ - puck.y;
   const aimLen = Math.hypot(aimX, aimZ) || 1;
-
   const behindDist = PADDLE_RADIUS + PUCK_RADIUS + 0.28;
   return {
     x: puck.x - (aimX / aimLen) * behindDist,
@@ -186,7 +251,8 @@ export function tick({ pucks, self, opponent, dt }) {
   const defenseZ = isBlue ? 5.8 : -5.8;
   const pressZ = isBlue ? 2.2 : -2.2;
 
-  const primary = choosePrimaryThreat(pucks, self, opponent, isBlue);
+  const threats = assessAllThreats(pucks, self, opponent, isBlue);
+  const primary = threats[0];
 
   let targetX = self.x;
   let targetZ = self.y;
@@ -196,44 +262,60 @@ export function tick({ pucks, self, opponent, dt }) {
     targetX = pos.x;
     targetZ = pos.z;
   } else {
-    const { puck, tGoal, speed, movingTowardsMe, inMyHalf } = primary;
+    const { puck, tGoal, speed, movingTowardsMe, inMyHalf, predXAtGoal, intercept, onTarget } = primary;
 
-    const emergency = tGoal < 0.85;
-    if (emergency && movingTowardsMe) {
-      const predX = predictXAtZ(puck, creaseEdgeZ);
-      const pos = getCreaseEdgePosition(predX, isBlue);
+    const critical = threats.filter((t) => t.score > 90 && t.movingTowardsMe && t.tGoal < 1.2);
+    if (critical.length > 1) {
+      let sum = 0;
+      let wsum = 0;
+      for (const t of critical) {
+        const w = 1 / Math.max(0.15, t.tGoal);
+        sum += t.predXAtGoal * w;
+        wsum += w;
+      }
+      const avgX = wsum ? sum / wsum : 0;
+      const pos = getCreaseEdgePosition(avgX, isBlue);
       targetX = pos.x;
       targetZ = pos.z;
     } else {
-      const offensePuck = chooseOffenseCandidate(pucks, self, isBlue);
-      if (offensePuck) {
-        const shotX = opponent.x >= 0 ? -1.7 : 1.7;
-        const approach = calculateApproachBehindPuck(offensePuck, shotX, oppGoalZ);
-        targetX = approach.x;
-        targetZ = approach.z;
-      } else if (inMyHalf) {
-        const shotX = opponent.x >= 0 ? -1.8 : 1.8;
-        const approach = calculateApproachBehindPuck(puck, shotX, oppGoalZ);
-        targetX = approach.x;
-        targetZ = approach.z;
-
-        const distToPuck = Math.hypot(puck.x - self.x, puck.y - self.y);
-        if (distToPuck < 1.35) {
-          targetX = puck.x;
-          targetZ = puck.y + (isBlue ? -1.2 : 1.2);
-        }
-      } else {
-        const oppDistToPuck = Math.hypot(puck.x - opponent.x, puck.y - opponent.y);
-        if (movingTowardsMe && oppDistToPuck < 2.0 && speed > 2.0) {
-          const predX = predictXAtZ(puck, creaseEdgeZ);
-          const pos = getCreaseEdgePosition(predX, isBlue);
+      const emergency = movingTowardsMe && tGoal < 0.85 && onTarget;
+      if (emergency) {
+        if (intercept) {
+          targetX = intercept.x;
+          targetZ = intercept.z;
+        } else {
+          const pos = getCreaseEdgePosition(predXAtGoal, isBlue);
           targetX = pos.x;
           targetZ = pos.z;
+        }
+      } else {
+        const offensePuck = chooseOffenseCandidate(threats, self, isBlue);
+        if (offensePuck) {
+          const approach = calculateApproachBehindPuck(offensePuck, shotTargetX(opponent.x), oppGoalZ);
+          targetX = approach.x;
+          targetZ = approach.z;
+        } else if (inMyHalf) {
+          const approach = calculateApproachBehindPuck(puck, shotTargetX(opponent.x), oppGoalZ);
+          targetX = approach.x;
+          targetZ = approach.z;
+
+          const distToPuck = Math.hypot(puck.x - self.x, puck.y - self.y);
+          if (distToPuck < 1.25) {
+            targetX = puck.x;
+            targetZ = puck.y + (isBlue ? -1.25 : 1.25);
+          }
         } else {
-          const guardZ = speed > 4.5 ? defenseZ : pressZ;
-          const predX = predictXAtZ(puck, guardZ);
-          targetX = clamp(predX, -(GOAL_WIDTH / 2 + 0.6), (GOAL_WIDTH / 2 + 0.6));
-          targetZ = guardZ;
+          const oppDistToPuck = Math.hypot(puck.x - opponent.x, puck.y - opponent.y);
+          if (movingTowardsMe && oppDistToPuck < 2.0 && speed > 2.0) {
+            const pos = getCreaseEdgePosition(predXAtGoal, isBlue);
+            targetX = pos.x;
+            targetZ = pos.z;
+          } else {
+            const guardZ = speed > 4.5 ? defenseZ : pressZ;
+            const pred = predictAtZ(puck, guardZ, isBlue);
+            targetX = clamp(pred.x, -(GOAL_WIDTH / 2 + 0.6), (GOAL_WIDTH / 2 + 0.6));
+            targetZ = guardZ;
+          }
         }
       }
     }
