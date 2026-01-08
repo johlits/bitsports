@@ -55,9 +55,45 @@ function inferMyId(self, grid) {
   if (owner > 0) myId = owner;
 }
 
+function inferMyIdFromScoresAndOpponents(self, others, grid) {
+  if (myId != null) return;
+  if (!grid || !Array.isArray(grid)) return;
+
+  const oppIds = new Set((others || []).map((o) => o.id).filter((id) => typeof id === "number"));
+
+  const counts = new Map();
+  const width = grid.length;
+  for (let x = 0; x < width; x++) {
+    const col = grid[x];
+    if (!col || !Array.isArray(col)) continue;
+    const height = col.length;
+    for (let y = 0; y < height; y++) {
+      const owner = col[y] ?? 0;
+      if (owner > 0) counts.set(owner, (counts.get(owner) || 0) + 1);
+    }
+  }
+
+  if (counts.size === 0) return;
+
+  const selfScore = self.score || 0;
+
+  let bestId = null;
+  let bestDelta = Infinity;
+  for (const [id, cnt] of counts.entries()) {
+    if (oppIds.has(id)) continue;
+    const delta = Math.abs(cnt - selfScore);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestId = id;
+    }
+  }
+
+  if (bestId != null) myId = bestId;
+}
+
 function computeLeader(self, others) {
   let leaderScore = self.score || 0;
-  let leaderId = myId;
+  let leaderId = myId != null ? myId : 0;
   for (const o of others || []) {
     if ((o.score || 0) > leaderScore) {
       leaderScore = o.score || 0;
@@ -69,7 +105,7 @@ function computeLeader(self, others) {
 
 function evaluatePowerup(p, state, meta) {
   const { self, grid, others, timeRemaining } = state;
-  const { tileSize, halfW, halfH, gridWidth, gridHeight, ratio, isLeading, behindBy } = meta;
+  const { tileSize, halfW, halfH, gridWidth, gridHeight, ratio, isLeading, behindBy, shielded } = meta;
 
   const dx = p.x - self.x;
   const dz = p.z - self.z;
@@ -92,6 +128,7 @@ function evaluatePowerup(p, state, meta) {
     base = 6 + paintable * 0.9;
     if (ratio < 0.4) base *= 1.25;
     if (behindBy > 8) base *= 1.15;
+    if (shielded) base *= 1.1;
   } else if (p.type === "speed") {
     base = ratio > 0.6 ? 7 : ratio > 0.35 ? 5.5 : 4.2;
     if ((self.powerups?.speedBoost || 0) > 0) base *= 0.25;
@@ -108,9 +145,20 @@ function evaluatePowerup(p, state, meta) {
       const od = hypot2(p.x - o.x, p.z - o.z);
       if (od < minD) minD = od;
     }
-    if (!isLeading) return 1;
+    if (shielded) return 1;
+    if (!isLeading) return minD < 1.2 ? 1.1 : 1;
     return minD < 1.6 ? 1.35 : minD < 3.0 ? 1.15 : 1;
   })();
+
+  const likelyLost = (() => {
+    if (!others || others.length === 0) return false;
+    for (const o of others) {
+      const od = hypot2(p.x - o.x, p.z - o.z);
+      if (od < d * 0.85) return true;
+    }
+    return false;
+  })();
+  if (likelyLost) base *= 0.55;
 
   const urgency = timeRemaining != null && timeRemaining < 10 ? 1.15 : 1;
 
@@ -137,7 +185,7 @@ function chooseBestPowerup(state, meta) {
 }
 
 function tileValue(owner, meta) {
-  const { preferStealLeader, leaderId, isLeading, behindBy, ratio } = meta;
+  const { preferStealLeader, leaderId, isLeading, behindBy, ratio, shielded } = meta;
 
   if (owner === 0) {
     let v = 1.0;
@@ -149,13 +197,14 @@ function tileValue(owner, meta) {
   if (myId != null && owner === myId) return 0;
 
   if (preferStealLeader) {
-    return owner === leaderId ? 2.4 : 0;
+    return owner === leaderId ? (shielded ? 2.9 : 2.4) : 0;
   }
 
   let v = 0.9;
   if (!isLeading) {
     if (behindBy > 10) v *= 1.9;
     else if (behindBy > 4) v *= 1.4;
+    if (shielded) v *= 1.2;
   } else {
     v *= ratio < 0.25 ? 1.1 : 0.75;
   }
@@ -183,7 +232,7 @@ function chooseTileTarget(state, meta) {
       if (base <= 0) continue;
 
       const gDist = manhattan(selfGX, selfGY, gx, gy);
-      const distPenalty = gDist * (meta.ratio > 0.7 ? 0.22 : 0.18);
+      const distPenalty = gDist * (meta.speedBoost ? 0.13 : (meta.ratio > 0.7 ? 0.22 : 0.18));
 
       let cluster = 0;
       for (let dx = -2; dx <= 2; dx++) {
@@ -206,7 +255,9 @@ function chooseTileTarget(state, meta) {
           const ogx = Math.floor((o.x + meta.halfW) / meta.tileSize);
           const ogy = Math.floor((o.z + meta.halfH) / meta.tileSize);
           const od = manhattan(gx, gy, ogx, ogy);
-          if (meta.isLeading) {
+          if (meta.shielded) {
+            if (od < 2) risk += (2 - od) * 0.15;
+          } else if (meta.isLeading) {
             if (od < 3) risk += (3 - od) * 1.1;
           } else {
             if (od < 2) risk += (2 - od) * 0.35;
@@ -284,6 +335,7 @@ export function tick(state) {
   }
 
   inferMyId(self, grid);
+  inferMyIdFromScoresAndOpponents(self, others, grid);
 
   const { leaderId, leaderScore } = computeLeader(self, others);
   const myScore = self.score || 0;
@@ -292,6 +344,8 @@ export function tick(state) {
 
   const totalTime = initialTime || 60;
   const ratio = totalTime > 0 ? timeRemaining / totalTime : 1;
+  const shielded = (self.powerups?.shield || 0) > 0;
+  const speedBoost = (self.powerups?.speedBoost || 0) > 0;
   const preferStealLeader = !isLeading && ratio < 0.33 && behindBy > 4 && leaderId != null;
 
   if (lastPos) {
@@ -324,6 +378,8 @@ export function tick(state) {
     behindBy,
     leaderId,
     preferStealLeader,
+    shielded,
+    speedBoost,
   };
 
   const bestPU = chooseBestPowerup(
@@ -341,7 +397,8 @@ export function tick(state) {
   }
 
   targetAge += dt;
-  if (!targetStillGood(state, meta) || targetAge > 1.25) {
+  const refresh = speedBoost ? 0.85 : 1.25;
+  if (!targetStillGood(state, meta) || targetAge > refresh) {
     const next = chooseTileTarget(state, meta);
     target = next;
     targetAge = 0;

@@ -1,402 +1,411 @@
 export const id = "swe-1-5";
 export const name = "SWE-1.5";
 
-// Advanced AI parameters
-const STRATEGY_UPDATE_INTERVAL = 0.5; // Update strategy every 0.5 seconds
-const TERRITORY_IMPORTANCE = 0.4; // Weight for territory control
-const POWERUP_IMPORTANCE = 0.3; // Weight for powerup collection
-const OFFENSIVE_IMPORTANCE = 0.2; // Weight for offensive actions
-const DEFENSIVE_IMPORTANCE = 0.1; // Weight for defensive actions
+/**
+ * Elite Paint Battle AI with adaptive strategy:
+ * - Early game: Rapid expansion with sweep patterns
+ * - Mid game: Powerup hunting + strategic stealing
+ * - Late game: Aggressive leader targeting when behind
+ * - Shield mode: Maximum aggression when protected
+ */
 
-// Memory and state tracking
-let memory = {
-    myId: null,
-    initialTime: null,
-    lastStrategyUpdate: 0,
-    currentStrategy: 'expand', // expand, defend, attack, powerup
-    targetPosition: null,
-    territoryMap: null,
-    lastPosition: null,
-    stuckCounter: 0,
-    enemyPositions: new Map(),
-    powerupHistory: [],
-    controlZones: []
-};
+// Constants matching RULES.md
+const GRID_SIZE = 40;
+const TILE_SIZE = 0.5;
+const HALF_WORLD = 10;
+const PLAYER_SPEED = 8;
+const SPEED_BOOST_MULT = 1.5;
+
+// Persistent state
+let myId = null;
+let lastPos = null;
+let stuckCount = 0;
+let sweepDir = 1;
+let lastSweepY = -1;
+let targetCache = null;
+let targetAge = 0;
 
 function clamp(v, lo, hi) {
-    return Math.max(lo, Math.min(hi, v));
+  return Math.max(lo, Math.min(hi, v));
 }
 
-function hypot2(x, z) {
-    return Math.hypot(x, z);
+function gridToWorld(gx, gy) {
+  return {
+    x: gx * TILE_SIZE - HALF_WORLD + TILE_SIZE / 2,
+    z: gy * TILE_SIZE - HALF_WORLD + TILE_SIZE / 2
+  };
 }
 
-function normalizeDir(x, z) {
-    const len = hypot2(x, z);
-    if (!len || len < 1e-9) return { x: 0, z: 0 };
-    return { x: x / len, z: z / len };
+function dist(x1, z1, x2, z2) {
+  return Math.hypot(x2 - x1, z2 - z1);
 }
 
-function worldToGrid(x, z, tileSize, halfW, halfH, gridWidth, gridHeight) {
-    const gx = Math.floor((x + halfW) / tileSize);
-    const gy = Math.floor((z + halfH) / tileSize);
-    return {
-        gx: clamp(gx, 0, gridWidth - 1),
-        gy: clamp(gy, 0, gridHeight - 1),
-    };
+function manhattanDist(gx1, gy1, gx2, gy2) {
+  return Math.abs(gx2 - gx1) + Math.abs(gy2 - gy1);
 }
 
-function gridToWorld(gx, gy, tileSize, halfW, halfH) {
-    return {
-        x: gx * tileSize - halfW + tileSize / 2,
-        z: gy * tileSize - halfH + tileSize / 2,
-    };
+function normalize(dx, dz) {
+  const len = Math.hypot(dx, dz);
+  if (len < 0.001) return { x: 0, z: 0 };
+  return { x: dx / len, z: dz / len };
 }
 
-function manhattan(gx1, gy1, gx2, gy2) {
-    return Math.abs(gx2 - gx1) + Math.abs(gy2 - gy1);
+/**
+ * Infer our player ID from the grid
+ */
+function inferMyId(self, grid, others) {
+  if (myId !== null) return;
+  
+  // First try current tile
+  const owner = grid?.[self.gridX]?.[self.gridY];
+  if (owner > 0) {
+    myId = owner;
+    return;
+  }
+  
+  // Count tiles by owner, exclude known opponents
+  const oppIds = new Set(others.map(o => o.id));
+  const counts = new Map();
+  
+  for (let x = 0; x < GRID_SIZE; x++) {
+    for (let y = 0; y < GRID_SIZE; y++) {
+      const owner = grid[x]?.[y] ?? 0;
+      if (owner > 0 && !oppIds.has(owner)) {
+        counts.set(owner, (counts.get(owner) || 0) + 1);
+      }
+    }
+  }
+  
+  // Find owner with tile count closest to our score
+  let bestId = null;
+  let bestDelta = Infinity;
+  for (const [id, count] of counts.entries()) {
+    const delta = Math.abs(count - self.score);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestId = id;
+    }
+  }
+  
+  if (bestId !== null) myId = bestId;
 }
 
-function euclidean(x1, z1, x2, z2) {
-    return Math.hypot(x2 - x1, z2 - z1);
+/**
+ * Evaluate powerup value based on game state
+ */
+function evaluatePowerup(powerup, self, others, timeRemaining) {
+  const distance = dist(self.x, self.z, powerup.x, powerup.z);
+  const timeRatio = timeRemaining / 60;
+  const myScore = self.score;
+  const maxOtherScore = others.length > 0 ? Math.max(...others.map(o => o.score)) : 0;
+  const leading = myScore > maxOtherScore;
+  const behind = maxOtherScore > myScore * 1.15;
+  const shielded = self.powerups?.shield > 0;
+  const speedBoost = self.powerups?.speedBoost > 0;
+
+  let value = 0;
+
+  switch (powerup.type) {
+    case "bomb":
+      // 9 tiles instantly - extremely valuable
+      value = 14;
+      if (timeRatio < 0.25) value *= 1.4; // Late game bonus
+      if (behind) value *= 1.3; // Need to catch up
+      if (shielded) value *= 1.1; // Shielded = can be aggressive
+      break;
+
+    case "speed":
+      // 1.5x speed for 3 seconds
+      value = 10;
+      if (timeRatio > 0.6) value *= 1.3; // Early game = more tiles
+      if (speedBoost) value *= 0.2; // Already boosted
+      break;
+
+    case "shield":
+      // 5 seconds of protection
+      value = 6;
+      if (leading && myScore > 100) value *= 2.0;
+      if (self.powerups?.shield > 2) value *= 0.15;
+      break;
+  }
+
+  // Distance penalty
+  const distPenalty = Math.min(distance / 16, 0.7);
+  value *= (1 - distPenalty);
+
+  // Check if opponent is closer
+  for (const o of others) {
+    const oppDist = dist(o.x, o.z, powerup.x, powerup.z);
+    if (oppDist < distance * 0.7) {
+      value *= 0.4; // They'll probably get it
+      break;
+    }
+  }
+
+  return value;
 }
 
-// Advanced territory analysis
-function analyzeTerritory(grid, gridWidth, gridHeight, playerId) {
-    const territory = [];
-    const frontier = [];
-    const controlled = [];
-    
-    for (let x = 0; x < gridWidth; x++) {
-        territory[x] = [];
-        for (let y = 0; y < gridHeight; y++) {
-            const owner = grid[x][y];
-            if (owner === playerId) {
-                territory[x][y] = 'controlled';
-                controlled.push({x, y});
-                
-                // Check if this is a frontier tile
-                let isFrontier = false;
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        if (dx === 0 && dy === 0) continue;
-                        const nx = x + dx;
-                        const ny = y + dy;
-                        if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-                            if (grid[nx][ny] !== playerId) {
-                                isFrontier = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (isFrontier) break;
-                }
-                if (isFrontier) {
-                    frontier.push({x, y});
-                }
-            } else if (owner === 0) {
-                territory[x][y] = 'empty';
-            } else {
-                territory[x][y] = 'enemy';
-            }
+/**
+ * Count paintable tiles in a region
+ */
+function countPaintableTiles(grid, gx, gy, radius, myId, targetId) {
+  let count = 0;
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      const nx = gx + dx;
+      const ny = gy + dy;
+      if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+        const owner = grid[nx][ny];
+        if (targetId !== null) {
+          if (owner === targetId) count++;
+        } else if (owner === 0 || (owner !== myId && owner !== 0)) {
+          count++;
         }
+      }
     }
-    
-    return { territory, frontier, controlled };
+  }
+  return count;
 }
 
-// Find optimal expansion targets
-function findExpansionTargets(territory, gridWidth, gridHeight, selfGrid) {
-    const targets = [];
-    const visited = new Set();
-    
-    // BFS from controlled territory to find valuable empty tiles
-    for (const tile of territory.frontier) {
-        for (let dx = -2; dx <= 2; dx++) {
-            for (let dy = -2; dy <= 2; dy++) {
-                const nx = tile.x + dx;
-                const ny = tile.y + dy;
-                const key = `${nx},${ny}`;
-                
-                if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight && 
-                    !visited.has(key) && territory.territory[nx][ny] === 'empty') {
-                    visited.add(key);
-                    
-                    // Calculate value based on connectivity and distance
-                    const dist = euclidean(nx, ny, selfGrid.gx, selfGrid.gy);
-                    const connectivity = countEmptyNeighbors(nx, ny, territory.territory, gridWidth, gridHeight);
-                    const value = connectivity * 10 - dist;
-                    
-                    targets.push({x: nx, y: ny, value, dist});
-                }
-            }
+/**
+ * Find best tile to paint
+ */
+function findBestTarget(self, grid, others, timeRemaining, myId) {
+  const selfGX = self.gridX;
+  const selfGY = self.gridY;
+  const myScore = self.score;
+
+  // Determine strategy
+  const scores = others.map(o => ({ id: o.id, score: o.score }));
+  scores.sort((a, b) => b.score - a.score);
+  const leaderId = scores.length > 0 ? scores[0].id : null;
+  const leaderScore = scores.length > 0 ? scores[0].score : 0;
+
+  // Target enemy tiles if significantly behind
+  const behind = leaderScore > myScore * 1.2;
+  const lateGame = timeRemaining < 20;
+  const targetEnemy = behind && lateGame && leaderId !== null;
+  
+  // When shielded, be more aggressive
+  const shielded = self.powerups?.shield > 0;
+  const aggressiveSteal = shielded || (behind && timeRemaining < 35);
+
+  let bestTile = null;
+  let bestScore = -Infinity;
+
+  // Search in expanding rings
+  const maxRadius = 25;
+
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        // Perimeter only for efficiency
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+
+        const gx = selfGX + dx;
+        const gy = selfGY + dy;
+        if (gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) continue;
+
+        const owner = grid[gx][gy];
+
+        // Determine if this is a valid target
+        let isTarget = false;
+        let tileValue = 1;
+
+        if (owner === 0) {
+          isTarget = true;
+          tileValue = 1.2; // Unpainted slightly preferred
+        } else if (owner !== myId) {
+          if (targetEnemy && owner === leaderId) {
+            isTarget = true;
+            tileValue = 1.5; // Leader tiles are valuable
+          } else if (aggressiveSteal) {
+            isTarget = true;
+            tileValue = 1.0;
+          }
         }
-    }
-    
-    return targets.sort((a, b) => b.value - a.value);
-}
 
-function countEmptyNeighbors(x, y, territory, gridWidth, gridHeight) {
-    let count = 0;
-    for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-            if (dx === 0 && dy === 0) continue;
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight && territory[nx][ny] === 'empty') {
-                count++;
-            }
+        if (!isTarget) continue;
+
+        // Score this tile
+        let score = 100 - radius * 3;
+        score *= tileValue;
+
+        // Cluster bonus
+        const cluster = countPaintableTiles(grid, gx, gy, 2, myId, targetEnemy ? leaderId : null);
+        score += cluster * 3;
+
+        // Avoid opponents (unless shielded)
+        if (!shielded) {
+          for (const o of others) {
+            const ogx = Math.floor((o.x + HALF_WORLD) / TILE_SIZE);
+            const ogy = Math.floor((o.z + HALF_WORLD) / TILE_SIZE);
+            const d = manhattanDist(gx, gy, ogx, ogy);
+            if (d < 4) score -= (4 - d) * 5;
+          }
         }
-    }
-    return count;
-}
 
-// Strategic decision making
-function determineStrategy(state, territory) {
-    const timeRatio = state.timeRemaining / (memory.initialTime || 60);
-    const myScore = state.self.score;
-    const maxEnemyScore = Math.max(...state.others.map(p => p.score), 0);
-    const scoreDiff = myScore - maxEnemyScore;
-    
-    // Early game: expand rapidly
-    if (timeRatio > 0.7) {
-        return 'expand';
-    }
-    
-    // Mid game: adjust based on score
-    if (timeRatio > 0.3) {
-        if (scoreDiff > 10) {
-            return 'defend'; // Winning, play defensively
-        } else if (scoreDiff < -10) {
-            return 'attack'; // Losing, play aggressively
-        } else {
-            return 'expand'; // Close game, continue expanding
+        // Sweep pattern bonus
+        if (lastSweepY >= 0) {
+          const sameRow = (gy === lastSweepY);
+          const nextRow = (gy === lastSweepY + sweepDir);
+          if (sameRow) score += 8;
+          if (nextRow) score += 5;
         }
-    }
-    
-    // Late game: desperate measures
-    if (timeRatio <= 0.3) {
-        if (scoreDiff > 5) {
-            return 'defend'; // Protect lead
-        } else {
-            return 'attack'; // Must attack
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestTile = { gx, gy };
         }
+      }
     }
-    
-    return 'expand';
+
+    // Early exit if we found good tiles nearby
+    if (bestTile && radius >= 3 && bestScore > 60) break;
+  }
+
+  return bestTile;
 }
 
-// Find strategic powerup targets
-function findPowerupTargets(state, selfGrid) {
-    const targets = [];
-    
-    for (const powerup of state.powerups) {
-        const powerupGrid = worldToGrid(powerup.x, powerup.z, state.tileSize, 
-                                       state.gridWidth * state.tileSize / 2, 
-                                       state.gridHeight * state.tileSize / 2,
-                                       state.gridWidth, state.gridHeight);
-        
-        const dist = manhattan(selfGrid.gx, selfGrid.gy, powerupGrid.gx, powerupGrid.gy);
-        let priority = 50; // Base priority
-        
-        // Speed boost is most valuable for expansion
-        if (powerup.type === 'speed') priority += 30;
-        // Shield is valuable when losing
-        if (powerup.type === 'shield' && state.self.score < Math.max(...state.others.map(p => p.score))) priority += 20;
-        
-        // Adjust priority based on distance
-        priority -= dist * 2;
-        
-        targets.push({powerup, priority, dist});
-    }
-    
-    return targets.sort((a, b) => b.priority - a.priority);
-}
-
-// Find enemy targets for offensive play
-function findEnemyTargets(state, selfGrid, territory) {
-    const targets = [];
-    
-    for (const enemy of state.others) {
-        const enemyGrid = worldToGrid(enemy.x, enemy.z, state.tileSize,
-                                     state.gridWidth * state.tileSize / 2,
-                                     state.gridHeight * state.tileSize / 2,
-                                     state.gridWidth, state.gridHeight);
-        
-        const dist = manhattan(selfGrid.gx, selfGrid.gy, enemyGrid.gx, enemyGrid.gy);
-        
-        // Find enemy territory tiles near enemy position
-        for (let dx = -3; dx <= 3; dx++) {
-            for (let dy = -3; dy <= 3; dy++) {
-                const nx = enemyGrid.gx + dx;
-                const ny = enemyGrid.gy + dy;
-                
-                if (nx >= 0 && nx < state.gridWidth && ny >= 0 && ny < state.gridHeight &&
-                    state.grid[nx][ny] === enemy.id) {
-                    
-                    const tileDist = manhattan(selfGrid.gx, selfGrid.gy, nx, ny);
-                    const value = 20 - tileDist + (enemy.score > state.self.score ? 10 : 0);
-                    
-                    targets.push({x: nx, y: ny, value, enemyId: enemy.id});
-                }
-            }
+/**
+ * Find nearest tile owned by a specific player
+ */
+function findNearestEnemyTile(selfGX, selfGY, grid, targetId) {
+  for (let radius = 1; radius < GRID_SIZE; radius++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+        const gx = selfGX + dx;
+        const gy = selfGY + dy;
+        if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) {
+          if (grid[gx][gy] === targetId) {
+            return { gx, gy };
+          }
         }
+      }
     }
-    
-    return targets.sort((a, b) => b.value - a.value);
+  }
+  return null;
 }
 
-// Avoid getting stuck
-function checkIfStuck(currentPos, lastPos) {
-    if (!lastPos) return false;
-    
-    const dist = euclidean(currentPos.x, currentPos.z, lastPos.x, lastPos.z);
-    return dist < 0.1; // Very small movement
-}
+/**
+ * Main AI tick
+ */
+export function tick(state) {
+  const { self, others, powerups, grid, timeRemaining, dt } = state;
 
-// Get unstuck by moving in a random direction
-function getUnstuck() {
+  // Use provided grid coordinates
+  const selfGX = self.gridX;
+  const selfGY = self.gridY;
+
+  // Infer our ID
+  inferMyId(self, grid, others);
+
+  // Stuck detection
+  if (lastPos) {
+    const moved = dist(self.x, self.z, lastPos.x, lastPos.z);
+    if (moved < 0.03) {
+      stuckCount++;
+    } else {
+      stuckCount = 0;
+    }
+  }
+  lastPos = { x: self.x, z: self.z };
+
+  // Escape if stuck
+  if (stuckCount > 15) {
+    stuckCount = 0;
+    sweepDir *= -1;
     const angle = Math.random() * Math.PI * 2;
     return { x: Math.cos(angle), z: Math.sin(angle) };
-}
+  }
 
-// Main AI tick function
-export function tick(state) {
-    // Initialize memory
-    if (memory.myId === null) {
-        memory.myId = state.self.score > 0 ? 1 : 0; // Approximate ID detection
-        memory.initialTime = state.timeRemaining;
+  // === PRIORITY 1: High-value powerups ===
+  if (powerups.length > 0) {
+    let bestPowerup = null;
+    let bestValue = 0;
+
+    for (const p of powerups) {
+      const value = evaluatePowerup(p, self, others, timeRemaining);
+      const distance = dist(self.x, self.z, p.x, p.z);
+
+      // Dynamic threshold
+      const threshold = distance < 1.5 ? 3 : (distance < 4 ? 5 : 7);
+
+      if (value > bestValue && value > threshold) {
+        bestValue = value;
+        bestPowerup = p;
+      }
     }
-    
-    // Update strategy periodically
-    if (state.timeRemaining - memory.lastStrategyUpdate > STRATEGY_UPDATE_INTERVAL) {
-        const territory = analyzeTerritory(state.grid, state.gridWidth, state.gridHeight, memory.myId);
-        memory.currentStrategy = determineStrategy(state, territory);
-        memory.territoryMap = territory;
-        memory.lastStrategyUpdate = state.timeRemaining;
+
+    if (bestPowerup) {
+      targetCache = null;
+      return normalize(bestPowerup.x - self.x, bestPowerup.z - self.z);
     }
-    
-    const selfGrid = worldToGrid(state.self.x, state.self.z, state.tileSize,
-                                 state.gridWidth * state.tileSize / 2,
-                                 state.gridHeight * state.tileSize / 2,
-                                 state.gridWidth, state.gridHeight);
-    
-    // Check if stuck
-    if (checkIfStuck({x: state.self.x, z: state.self.z}, memory.lastPosition)) {
-        memory.stuckCounter++;
-        if (memory.stuckCounter > 5) {
-            memory.stuckCounter = 0;
-            return getUnstuck();
+  }
+
+  // === PRIORITY 2: Strategic painting ===
+  targetAge += dt;
+  const refreshInterval = self.powerups?.speedBoost > 0 ? 0.85 : 1.25;
+  
+  if (!targetCache || targetAge > refreshInterval) {
+    const target = findBestTarget(self, grid, others, timeRemaining, myId);
+    if (target) {
+      targetCache = target;
+      targetAge = 0;
+    }
+  }
+
+  if (targetCache) {
+    lastSweepY = targetCache.gy;
+    const world = gridToWorld(targetCache.gx, targetCache.gy);
+    const dx = world.x - self.x;
+    const dz = world.z - self.z;
+    const len = Math.hypot(dx, dz);
+
+    // Look-ahead for smooth movement
+    if (len < 0.25) {
+      // Continue in sweep direction
+      const nextGX = targetCache.gx + sweepDir;
+      const nextGY = targetCache.gy;
+      if (nextGX >= 0 && nextGX < GRID_SIZE) {
+        if (grid[nextGX][nextGY] === 0 || grid[nextGX][nextGY] !== myId) {
+          const next = gridToWorld(nextGX, nextGY);
+          return normalize(next.x - self.x, next.z - self.z);
+        } else {
+          // Row done, move to next row
+          sweepDir *= -1;
+          const newY = targetCache.gy + 1;
+          if (newY < GRID_SIZE) {
+            const next = gridToWorld(targetCache.gx, newY);
+            return normalize(next.x - self.x, next.z - self.z);
+          }
         }
-    } else {
-        memory.stuckCounter = 0;
+      }
     }
-    memory.lastPosition = {x: state.self.x, z: state.self.z};
-    
-    let target = null;
-    
-    // Execute strategy
-    switch (memory.currentStrategy) {
-        case 'expand': {
-            const expansionTargets = findExpansionTargets(memory.territoryMap, state.gridWidth, state.gridHeight, selfGrid);
-            if (expansionTargets.length > 0) {
-                const best = expansionTargets[0];
-                target = gridToWorld(best.x, best.y, state.tileSize,
-                                   state.gridWidth * state.tileSize / 2,
-                                   state.gridHeight * state.tileSize / 2);
-            }
-            break;
-        }
-        
-        case 'defend': {
-            // Find weak points in our territory to reinforce
-            const weakPoints = [];
-            for (const tile of memory.territoryMap.frontier) {
-                let enemyCount = 0;
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        const nx = tile.x + dx;
-                        const ny = tile.y + dy;
-                        if (nx >= 0 && nx < state.gridWidth && ny >= 0 && ny < state.gridHeight) {
-                            if (state.grid[nx][ny] !== 0 && state.grid[nx][ny] !== memory.myId) {
-                                enemyCount++;
-                            }
-                        }
-                    }
-                }
-                if (enemyCount > 0) {
-                    weakPoints.push({x: tile.x, y: tile.y, threat: enemyCount});
-                }
-            }
-            
-            if (weakPoints.length > 0) {
-                weakPoints.sort((a, b) => b.threat - a.threat);
-                const best = weakPoints[0];
-                target = gridToWorld(best.x, best.y, state.tileSize,
-                                   state.gridWidth * state.tileSize / 2,
-                                   state.gridHeight * state.tileSize / 2);
-            }
-            break;
-        }
-        
-        case 'attack': {
-            const enemyTargets = findEnemyTargets(state, selfGrid, memory.territoryMap);
-            if (enemyTargets.length > 0) {
-                const best = enemyTargets[0];
-                target = gridToWorld(best.x, best.y, state.tileSize,
-                                   state.gridWidth * state.tileSize / 2,
-                                   state.gridHeight * state.tileSize / 2);
-            }
-            break;
-        }
-        
-        case 'powerup': {
-            const powerupTargets = findPowerupTargets(state, selfGrid);
-            if (powerupTargets.length > 0) {
-                target = {x: powerupTargets[0].powerup.x, z: powerupTargets[0].powerup.z};
-            }
-            break;
-        }
+
+    return normalize(dx, dz);
+  }
+
+  // === PRIORITY 3: Steal from leader ===
+  const scores = others.map(o => ({ id: o.id, score: o.score }));
+  scores.sort((a, b) => b.score - a.score);
+
+  if (scores.length > 0 && scores[0].score > 0) {
+    const enemyTile = findNearestEnemyTile(selfGX, selfGY, grid, scores[0].id);
+    if (enemyTile) {
+      const world = gridToWorld(enemyTile.gx, enemyTile.gy);
+      return normalize(world.x - self.x, world.z - self.z);
     }
-    
-    // Fallback: find nearest empty tile
-    if (!target) {
-        let minDist = Infinity;
-        for (let x = 0; x < state.gridWidth; x++) {
-            for (let y = 0; y < state.gridHeight; y++) {
-                if (state.grid[x][y] === 0) {
-                    const worldPos = gridToWorld(x, y, state.tileSize,
-                                               state.gridWidth * state.tileSize / 2,
-                                               state.gridHeight * state.tileSize / 2);
-                    const dist = euclidean(state.self.x, state.self.z, worldPos.x, worldPos.z);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        target = worldPos;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Final fallback: random exploration
-    if (!target) {
-        const angle = Math.random() * Math.PI * 2;
-        target = {
-            x: state.self.x + Math.cos(angle) * 5,
-            z: state.self.z + Math.sin(angle) * 5
-        };
-    }
-    
-    // Calculate direction to target
-    const dx = target.x - state.self.x;
-    const dz = target.z - state.self.z;
-    
-    if (Math.abs(dx) < 0.2 && Math.abs(dz) < 0.2) {
-        // Reached target, find new one
-        memory.targetPosition = null;
-        return { x: 0, z: 0 };
-    }
-    
-    memory.targetPosition = target;
-    return normalizeDir(dx, dz);
+  }
+
+  // === FALLBACK: Move toward center ===
+  const centerDist = dist(self.x, self.z, 0, 0);
+  if (centerDist > 3) {
+    return normalize(-self.x, -self.z);
+  }
+
+  // Random
+  const angle = Math.random() * Math.PI * 2;
+  return { x: Math.cos(angle), z: Math.sin(angle) };
 }
