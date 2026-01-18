@@ -8,6 +8,5 @@ export const allAIs = [
     claudeOpus45,
     gpt52CodexXHigh,
     gemini3ProHigh,
-    gpt52HighReasoning,
     human,
 ];
