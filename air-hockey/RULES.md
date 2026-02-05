@@ -59,7 +59,7 @@ Paddles are automatically pushed out if they enter the crease zone. This prevent
 |----------|-------|
 | Puck Radius | 0.25 units |
 | Initial Speed | 3 units/second |
-| Friction | 0.997 (multiplied per frame) |
+| Friction | 0.997 (multiplied per physics step) |
 | Minimum Speed | 0.5 units/second |
 | Max Pucks | 10 |
 | Spawn Interval | 15 seconds |
@@ -71,7 +71,8 @@ Paddles are automatically pushed out if they enter the crease zone. This prevent
 - First puck spawns at center (0, 0) when game starts
 - Additional pucks spawn every 15 seconds at center
 - New pucks launch in a random direction within ±30° of the target half
-- After a goal, a new puck spawns toward the scoring player
+- Periodic spawns (every 15s) launch toward a randomly chosen half
+- After a goal, a new puck spawns toward the scoring player's side
 
 ## Collision Physics
 
@@ -81,8 +82,8 @@ Paddles are automatically pushed out if they enter the crease zone. This prevent
 
 ### Paddle-Puck Collisions
 - Collision occurs when distance between centers < paddle radius + puck radius
-- Puck velocity is reflected off the paddle surface
-- Paddle velocity influences puck speed (faster paddle hits = faster puck)
+- Puck bounces directly away from the paddle center along the collision normal (not angle-of-incidence reflection)
+- Paddle velocity along the collision normal influences the resulting puck speed
 - Minimum puck speed after hit: 0.5 units/second
 - Maximum puck speed after hit: 15 units/second
 
@@ -104,6 +105,15 @@ export function tick({ pucks, self, opponent, dt }) {
   return { x: 0, z: 0 };
 }
 ```
+
+### Side Handling
+
+The same `tick` function is called regardless of whether your AI is playing as Blue or Red. The engine passes `self` and `opponent` relative to your paddle. **Your AI must detect which side it is on** by checking `self.y`:
+
+- `self.y > 0` → You are the **Blue** paddle (defending goal at Z = +10)
+- `self.y < 0` → You are the **Red** paddle (defending goal at Z = -10)
+
+All coordinates are in absolute world space (not mirrored), so your AI must handle both sides correctly.
 
 ### Input Parameters
 
