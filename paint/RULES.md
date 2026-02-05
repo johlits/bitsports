@@ -56,13 +56,13 @@ worldZ = gy * 0.5 - 10 + 0.25
 
 ### Spawn Positions
 
-Players spawn at predefined positions around the grid edges:
-1. Bottom-left corner
-2. Top-right corner
-3. Bottom-right corner
-4. Top-left corner
-5. Bottom center
-6. Top center
+Players spawn at predefined positions around the grid edges (2 units inset):
+1. Top-left corner
+2. Bottom-right corner
+3. Top-right corner
+4. Bottom-left corner
+5. Top center
+6. Bottom center
 7. Left center
 8. Right center
 
@@ -85,14 +85,14 @@ Players spawn at predefined positions around the grid edges:
 
 ## Powerups
 
-Powerups spawn randomly on unpainted tiles every 5 seconds (max 5 on field).
+Powerups spawn randomly on unpainted tiles every 5 seconds (max 5 on field). Powerups will not spawn within 2 world units of any player.
 
 ### Powerup Types
 
 | Type | Visual | Color | Effect | Duration |
 |------|--------|-------|--------|----------|
 | Speed Boost | Cone | Yellow (`#fbbf24`) | 1.5× movement speed | 3 seconds |
-| Paint Bomb | Sphere | Red (`#ef4444`) | Instantly paints 3×3 area around player | Instant |
+| Paint Bomb | Sphere | Red (`#ef4444`) | Instantly paints 3×3 area around player (respects shields) | Instant |
 | Shield | Cube | Blue (`#38bdf8`) | Your tiles cannot be painted over | 5 seconds |
 
 ### Powerup Collection
@@ -126,6 +126,7 @@ export function tick(state) {
 ```javascript
 {
   self: {
+    id: number,          // Your player ID (1-8)
     x: number,           // Your world X position
     z: number,           // Your world Z position
     gridX: number,       // Your grid X coordinate (0-39)
