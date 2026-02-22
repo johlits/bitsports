@@ -53,8 +53,8 @@ function populateSelect(sel) {
 }
 populateSelect(blackSelect);
 populateSelect(whiteSelect);
-blackSelect.value = "human";
-whiteSelect.value = "heuristic";
+blackSelect.value = allAIs[0].id;
+whiteSelect.value = (allAIs[1] ?? allAIs[0]).id;
 
 // ─── UI collapse ─────────────────────────────────────────────────────────────
 uiToggle.addEventListener("click", () => {
