@@ -99,6 +99,35 @@
         text-align: center;
         color: #94a3b8;
         min-height: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3rem;
+      }
+
+      /* Stone Icons */
+      .stone-icon {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        vertical-align: middle;
+      }
+      .stone-icon.black {
+        background: radial-gradient(circle at 30% 30%, #555, #0a0a0a);
+        border: 1px solid #000;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      }
+      .stone-icon.white {
+        background: radial-gradient(circle at 30% 30%, #ffffff, #c8c8c8);
+        border: 1px solid #aaa;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      }
+      
+      .player-label {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
       }
 
       #ui.collapsed { padding: 0.35rem 0.6rem; background: rgba(15, 23, 42, 0.5); }
@@ -193,6 +222,87 @@
         0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; }
       }
+      /* Victory Screen */
+      #victory-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 200;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        animation: fadeIn 0.5s ease-out;
+      }
+      #victory-overlay.active {
+        display: flex;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      #victory-title {
+        font-size: 3rem;
+        font-weight: 900;
+        color: #fbbf24;
+        text-shadow: 0 0 30px rgba(251, 191, 36, 0.5), 0 4px 20px rgba(0,0,0,0.8);
+        margin-bottom: 1rem;
+        animation: victoryPulse 2s ease-in-out infinite;
+      }
+      @keyframes victoryPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      #victory-winner {
+        font-size: 2rem;
+        font-weight: 700;
+        color: white;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        margin-bottom: 2rem;
+        text-align: center;
+      }
+      #victory-winner .winner-name {
+        color: #4ade80;
+      }
+      #victory-details {
+        background: rgba(30, 41, 59, 0.9);
+        border-radius: 1rem;
+        padding: 1.5rem 2rem;
+        min-width: 300px;
+        margin-bottom: 2rem;
+        color: #94a3b8;
+        text-align: center;
+        font-size: 1.1rem;
+        line-height: 1.6;
+      }
+      #victory-buttons {
+        display: flex;
+        gap: 1rem;
+      }
+      #victory-buttons button {
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #victory-buttons button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      }
+      #victory-play-again {
+        background: linear-gradient(135deg, #4ade80, #22c55e);
+        color: white;
+      }
+      #victory-close {
+        background: #334155;
+        color: #f1f5f9;
+      }
     </style>
   </head>
   <body>
@@ -202,10 +312,16 @@
         <button id="ui-toggle" type="button">Hide</button>
       </div>
       <div id="ui-body">
-        <label for="black-ai">Black (●)</label>
+        <div class="player-label">
+          <span class="stone-icon black"></span>
+          <label for="black-ai" style="margin:0">Black</label>
+        </div>
         <select id="black-ai"></select>
 
-        <label for="white-ai">White (○)</label>
+        <div class="player-label" style="margin-top: 0.25rem;">
+          <span class="stone-icon white"></span>
+          <label for="white-ai" style="margin:0">White</label>
+        </div>
         <select id="white-ai"></select>
 
         <button id="start-btn">Start Game</button>
@@ -216,9 +332,9 @@
         </div>
 
         <div id="score">
-          <span class="score-black">● 0</span>
+          <span class="score-black"><span class="stone-icon black" style="margin-right:0.25rem;"></span>0</span>
           <span class="score-sep">cap</span>
-          <span class="score-white">0 ○</span>
+          <span class="score-white">0<span class="stone-icon white" style="margin-left:0.25rem;"></span></span>
         </div>
         <div id="status-line">Press Start Game</div>
       </div>
@@ -228,12 +344,23 @@
 
     <!-- Cinematic Mode Overlay -->
     <div id="cinematic-overlay">
-      <span id="cinematic-black-cap">●</span>
+      <span id="cinematic-black-cap" style="display:flex; align-items:center; gap:0.5rem;"><span class="stone-icon black" style="width:32px; height:32px;"></span> <span class="cap-val">0</span></span>
       <span id="cinematic-black-name">Black</span>
       <span id="cinematic-white-name">White</span>
-      <span id="cinematic-white-cap">○</span>
+      <span id="cinematic-white-cap" style="display:flex; align-items:center; gap:0.5rem;"><span class="cap-val">0</span> <span class="stone-icon white" style="width:32px; height:32px;"></span></span>
       <div id="cinematic-countdown"></div>
       <div id="cinematic-hint">Press C to exit</div>
+    </div>
+
+    <!-- Victory Screen Overlay -->
+    <div id="victory-overlay">
+      <div id="victory-title">GAME OVER</div>
+      <div id="victory-winner"></div>
+      <div id="victory-details"></div>
+      <div id="victory-buttons">
+        <button id="victory-play-again">Play Again</button>
+        <button id="victory-close">Close</button>
+      </div>
     </div>
 
     <script type="module" src="./main.js"></script>

@@ -139,6 +139,84 @@ export function score(board) {
   return { black, white, blackFinal: black, whiteFinal: white + KOMI };
 }
 
+// ─── Life / dominance detection ─────────────────────────────────────────────
+
+// Returns true if the empty intersection `i` is a true eye for `color`:
+// all 4 (or 3 at edge, 2 at corner) orthogonal neighbors are `color`,
+// AND at most 1 diagonal is not `color` (classic eye definition).
+export function isTrueEye(board, i, color) {
+  const { x, y } = coord(i);
+  if (board[i] !== EMPTY) return false;
+
+  // All orthogonal neighbors must be the same color
+  for (const n of neighbors(x, y)) {
+    if (board[n] !== color) return false;
+  }
+
+  // Diagonal check: count bad diagonals (empty or opponent)
+  const diags = [];
+  if (x > 0 && y > 0)                          diags.push(idx(x-1, y-1));
+  if (x < BOARD_SIZE-1 && y > 0)               diags.push(idx(x+1, y-1));
+  if (x > 0 && y < BOARD_SIZE-1)               diags.push(idx(x-1, y+1));
+  if (x < BOARD_SIZE-1 && y < BOARD_SIZE-1)    diags.push(idx(x+1, y+1));
+
+  // At corner (2 diags) — 0 bad allowed; at edge (3 diags) — ≤1 bad; center (4 diags) — ≤1 bad
+  const maxBad = diags.length <= 2 ? 0 : 1;
+  let bad = 0;
+  for (const d of diags) {
+    if (board[d] !== color) bad++;
+  }
+  return bad <= maxBad;
+}
+
+// Returns the number of true eyes in a group identified by its stone set.
+function countEyesForGroup(board, stones, color) {
+  const checked = new Set();
+  let eyes = 0;
+  for (const s of stones) {
+    const { x, y } = coord(s);
+    for (const n of neighbors(x, y)) {
+      if (!checked.has(n) && board[n] === EMPTY && isTrueEye(board, n, color)) {
+        eyes++;
+      }
+      checked.add(n);
+    }
+  }
+  return eyes;
+}
+
+// Returns the count of stones belonging to groups that have ≥ 2 true eyes (alive).
+export function countAliveStones(board, color) {
+  const visited = new Set();
+  let alive = 0;
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] !== color || visited.has(i)) continue;
+    const { stones } = getGroup(board, i);
+    for (const s of stones) visited.add(s);
+    if (countEyesForGroup(board, stones, color) >= 2) {
+      alive += stones.size;
+    }
+  }
+  return alive;
+}
+
+// Check dominance: one player's alive stones + their captured-stone lead > half the board.
+// Returns the winning color, or null if no dominance.
+export function checkDominance(board, captures) {
+  const total = BOARD_SIZE * BOARD_SIZE;
+  const half = total / 2;
+
+  for (const color of [BLACK, WHITE]) {
+    const opponent = color === BLACK ? WHITE : BLACK;
+    const aliveCount = countAliveStones(board, color);
+    // Net captured advantage: stones captured by this color minus stones it lost
+    const captureAdvantage = captures[color] - captures[opponent];
+    const effective = aliveCount + Math.max(0, captureAdvantage);
+    if (effective > half) return color;
+  }
+  return null;
+}
+
 // ─── Game state ───────────────────────────────────────────────────────────────
 
 export class GoGame {
@@ -177,6 +255,13 @@ export class GoGame {
     this.lastMove = { x, y };
     this.passCount = 0;
     this.turn = this.turn === BLACK ? WHITE : BLACK;
+
+    // Dominance end condition
+    const dominant = checkDominance(this.board, this.captures);
+    if (dominant !== null) {
+      this._endGameByDominance(dominant);
+    }
+
     return true;
   }
 
@@ -187,8 +272,14 @@ export class GoGame {
     this.lastMove = 'pass';
     if (this.passCount >= 2) {
       this._endGame('double-pass');
-    } else {
-      this.turn = this.turn === BLACK ? WHITE : BLACK;
+      return;
+    }
+    this.turn = this.turn === BLACK ? WHITE : BLACK;
+
+    // Dominance end condition
+    const dominant = checkDominance(this.board, this.captures);
+    if (dominant !== null) {
+      this._endGameByDominance(dominant);
     }
   }
 
@@ -208,6 +299,18 @@ export class GoGame {
       reason,
       blackScore: s.blackFinal,
       whiteScore: s.whiteFinal,
+    };
+  }
+
+  _endGameByDominance(winner) {
+    this.gameOver = true;
+    const aliveB = countAliveStones(this.board, BLACK);
+    const aliveW = countAliveStones(this.board, WHITE);
+    this.result = {
+      winner,
+      reason: 'dominance',
+      blackScore: aliveB + this.captures[BLACK],
+      whiteScore: aliveW + this.captures[WHITE],
     };
   }
 

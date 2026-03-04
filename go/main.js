@@ -20,6 +20,13 @@ const cinematicBlackCap  = document.getElementById("cinematic-black-cap");
 const cinematicWhiteCap  = document.getElementById("cinematic-white-cap");
 const cinematicCountdown = document.getElementById("cinematic-countdown");
 
+// Victory screen elements
+const victoryOverlay = document.getElementById("victory-overlay");
+const victoryWinner = document.getElementById("victory-winner");
+const victoryDetails = document.getElementById("victory-details");
+const victoryPlayAgain = document.getElementById("victory-play-again");
+const victoryClose = document.getElementById("victory-close");
+
 // ─── Canvas setup ─────────────────────────────────────────────────────────────
 const canvas = document.createElement("canvas");
 container.appendChild(canvas);
@@ -64,12 +71,12 @@ uiToggle.addEventListener("click", () => {
 
 // ─── Cinematic mode ───────────────────────────────────────────────────────────
 function updateCinematicOverlay() {
-  const bName = blackAI ? blackAI.name : "Human (Click)";
-  const wName = whiteAI ? whiteAI.name : "Human (Click)";
+  const bName = blackAI ? blackAI.name : "Human";
+  const wName = whiteAI ? whiteAI.name : "Human";
   cinematicBlackName.textContent = bName;
   cinematicWhiteName.textContent = wName;
-  cinematicBlackCap.textContent  = `● ${game.captures[BLACK]}`;
-  cinematicWhiteCap.textContent  = `${game.captures[WHITE]} ○`;
+  cinematicBlackCap.querySelector(".cap-val").textContent = game.captures[BLACK];
+  cinematicWhiteCap.querySelector(".cap-val").textContent = game.captures[WHITE];
 }
 
 function clearCountdown() {
@@ -109,6 +116,49 @@ document.addEventListener("keydown", (e) => {
     document.body.classList.remove("cinematic-mode");
     clearCountdown();
   }
+});
+
+// ─── Victory Screen ───────────────────────────────────────────────────────────
+
+function showVictoryScreen() {
+  if (!game.gameOver || !game.result) return;
+  
+  const { winner, reason, blackScore, whiteScore } = game.result;
+  
+  const winnerColor = winner === BLACK ? "Black" : "White";
+  const winnerAI = winner === BLACK ? blackAI : whiteAI;
+  const winnerName = winnerAI ? winnerAI.name : `Human (${winnerColor})`;
+  const winnerCssClass = winner === BLACK ? "style='color: #e2e8f0;'" : "style='color: #94a3b8;'";
+  
+  victoryWinner.innerHTML = `<span class="winner-name" ${winnerCssClass}>${winnerName}</span> wins!`;
+  
+  if (reason === 'resign') {
+    victoryDetails.innerHTML = `by resignation`;
+  } else if (reason === 'dominance') {
+    victoryDetails.innerHTML = `
+      by dominance<br><br>
+      Black: ${blackScore} (alive+cap)<br>
+      White: ${whiteScore} (alive+cap)
+    `;
+  } else if (blackScore !== null) {
+    victoryDetails.innerHTML = `
+      Black: ${blackScore.toFixed(1)}<br>
+      White: ${whiteScore.toFixed(1)} (incl. ${KOMI} komi)
+    `;
+  } else {
+    victoryDetails.innerHTML = `by ${reason}`;
+  }
+  
+  victoryOverlay.classList.add("active");
+}
+
+victoryPlayAgain.addEventListener("click", () => {
+  victoryOverlay.classList.remove("active");
+  startBtn.click();
+});
+
+victoryClose.addEventListener("click", () => {
+  victoryOverlay.classList.remove("active");
 });
 
 // ─── Layout calculation ───────────────────────────────────────────────────────
@@ -228,9 +278,10 @@ function draw() {
     }
   }
 
-  // Game over overlay
-  if (game.gameOver && game.result) {
-    drawResultOverlay();
+  // We no longer draw the canvas overlay result, instead we use the DOM overlay
+  if (game.gameOver && game.result && !victoryOverlay.classList.contains("active")) {
+     // Ensure it shows up if it was dismissed but we still want to indicate game over somewhere? 
+     // Usually showing once is enough. We'll handle showing it in the game loop/handlers.
   }
 }
 
@@ -265,42 +316,6 @@ function drawStone(cx, cy, r, color) {
   ctx.stroke();
 }
 
-function drawResultOverlay() {
-  const { winner, reason, blackScore, whiteScore } = game.result;
-  const W = canvas.width, H = canvas.height;
-
-  ctx.fillStyle = "rgba(5, 8, 22, 0.75)";
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.save();
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  const winnerName = winner === BLACK ? "Black" : "White";
-  const winnerColor = winner === BLACK ? "#e2e8f0" : "#94a3b8";
-
-  ctx.font = `bold ${Math.round(H * 0.06)}px system-ui`;
-  ctx.fillStyle = winnerColor;
-  ctx.fillText(`${winnerName} wins!`, W / 2, H / 2 - H * 0.07);
-
-  ctx.font = `${Math.round(H * 0.03)}px system-ui`;
-  ctx.fillStyle = "#94a3b8";
-
-  if (reason === "resign") {
-    ctx.fillText(`by resignation`, W / 2, H / 2);
-  } else if (blackScore !== null) {
-    ctx.fillText(
-      `Black ${blackScore.toFixed(1)}  ·  White ${whiteScore.toFixed(1)} (incl. ${KOMI} komi)`,
-      W / 2, H / 2
-    );
-  }
-
-  ctx.font = `${Math.round(H * 0.022)}px system-ui`;
-  ctx.fillStyle = "#475569";
-  ctx.fillText("Press Start Game to play again", W / 2, H / 2 + H * 0.07);
-  ctx.restore();
-}
-
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -320,14 +335,14 @@ function updateUI() {
   const bc = game.captures[BLACK];
   const wc = game.captures[WHITE];
   scoreEl.innerHTML =
-    `<span class="score-black">● cap: ${bc}</span>` +
-    `<span class="score-sep"> · </span>` +
-    `<span class="score-white">cap: ${wc} ○</span>`;
+    `<span class="score-black"><span class="stone-icon black" style="margin-right:0.25rem;"></span>${bc}</span>` +
+    `<span class="score-sep"> cap </span>` +
+    `<span class="score-white">${wc}<span class="stone-icon white" style="margin-left:0.25rem;"></span></span>`;
 
   if (cinematicMode) updateCinematicOverlay();
 
   if (!running) {
-    statusEl.textContent = "Press Start Game";
+    statusEl.innerHTML = "Press Start Game";
     passBtn.disabled = true;
     resignBtn.disabled = true;
     return;
@@ -337,9 +352,11 @@ function updateUI() {
     const { winner, reason, blackScore, whiteScore } = game.result;
     const name = winner === BLACK ? "Black" : "White";
     if (reason === "resign") {
-      statusEl.textContent = `${name} wins by resignation`;
+      statusEl.innerHTML = `${name} wins by resignation`;
+    } else if (reason === "dominance") {
+      statusEl.innerHTML = `${name} wins by dominance · B ${blackScore} – W ${whiteScore}`;
     } else {
-      statusEl.textContent =
+      statusEl.innerHTML =
         `${name} wins · B ${blackScore?.toFixed(1)} – W ${whiteScore?.toFixed(1)}`;
     }
     passBtn.disabled = true;
@@ -347,12 +364,16 @@ function updateUI() {
     return;
   }
 
-  const turnName = game.turn === BLACK ? "Black ●" : "White ○";
+  const turnName = game.turn === BLACK ? "Black" : "White";
+  const turnIcon = game.turn === BLACK 
+    ? '<span class="stone-icon black"></span>' 
+    : '<span class="stone-icon white"></span>';
+    
   const currentAI = game.turn === BLACK ? blackAI : whiteAI;
   const isHuman = !currentAI || currentAI.id === "human";
-  statusEl.textContent = isHuman
-    ? `${turnName} — click to place`
-    : `${turnName} — thinking…`;
+  statusEl.innerHTML = isHuman
+    ? `${turnIcon} <span>${turnName} — click to place</span>`
+    : `${turnIcon} <span>${turnName} — thinking…</span>`;
 
   passBtn.disabled   = !isHuman;
   resignBtn.disabled = !isHuman;
@@ -378,6 +399,10 @@ function loop(ts) {
         }
         aiThinkTimer = AI_DELAY;
         updateUI();
+        
+        if (game.gameOver) {
+          showVictoryScreen();
+        }
       }
     }
   }
@@ -409,6 +434,10 @@ canvas.addEventListener("click", (e) => {
   if (game.playMove(g.x, g.y)) {
     aiThinkTimer = AI_DELAY;
     updateUI();
+    
+    if (game.gameOver) {
+      showVictoryScreen();
+    }
   }
 });
 
@@ -426,12 +455,18 @@ canvas.addEventListener("touchend", (e) => {
   if (game.playMove(g.x, g.y)) {
     aiThinkTimer = AI_DELAY;
     updateUI();
+    
+    if (game.gameOver) {
+      showVictoryScreen();
+    }
   }
   e.preventDefault();
 }, { passive: false });
 
 // ─── Button handlers ──────────────────────────────────────────────────────────
 startBtn.addEventListener("click", () => {
+  victoryOverlay.classList.remove("active");
+
   const bAI = allAIs.find(a => a.id === blackSelect.value) ?? allAIs[0];
   const wAI = allAIs.find(a => a.id === whiteSelect.value) ?? allAIs[0];
   blackAI = bAI.id === "human" ? null : bAI;
@@ -450,6 +485,9 @@ passBtn.addEventListener("click", () => {
   game.pass();
   aiThinkTimer = AI_DELAY;
   updateUI();
+  if (game.gameOver) {
+    showVictoryScreen();
+  }
 });
 
 resignBtn.addEventListener("click", () => {
@@ -458,4 +496,7 @@ resignBtn.addEventListener("click", () => {
   if (currentAI && currentAI.id !== "human") return;
   game.resign(game.turn);
   updateUI();
+  if (game.gameOver) {
+    showVictoryScreen();
+  }
 });
