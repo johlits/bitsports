@@ -1,7 +1,14 @@
 export const id = "human";
 export const name = "Human (Keyboard)";
 
-const keys = { up: false, down: false, left: false, right: false };
+const keys = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  space: false,
+};
+
 let initialized = false;
 
 function initInput() {
@@ -30,6 +37,9 @@ function initInput() {
       case "D":
         keys.right = true;
         break;
+      case " ":
+        keys.space = true;
+        break;
     }
   });
 
@@ -55,6 +65,9 @@ function initInput() {
       case "D":
         keys.right = false;
         break;
+      case " ":
+        keys.space = false;
+        break;
     }
   });
 
@@ -63,21 +76,16 @@ function initInput() {
     keys.down = false;
     keys.left = false;
     keys.right = false;
+    keys.space = false;
   });
 }
 
 export function tick() {
   initInput();
-
-  let dx = 0;
-  let dz = 0;
-
-  if (keys.up) dz -= 1;
-  if (keys.down) dz += 1;
-  if (keys.left) dx -= 1;
-  if (keys.right) dx += 1;
-
-  const len = Math.hypot(dx, dz);
-  if (len > 0) return { x: dx / len, z: dz / len };
-  return { x: 0, z: 0 };
+  return {
+    throttle: keys.up ? 1 : 0,
+    brake: keys.down ? 1 : 0,
+    steer: (keys.left ? -1 : 0) + (keys.right ? 1 : 0),
+    useItem: keys.space,
+  };
 }

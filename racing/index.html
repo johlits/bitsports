@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="../favicon.ico" />
+    <title>Bitsports - Kart Racing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #050816;
+        color: #f8fafc;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #ui {
+        position: fixed;
+        top: 0.75rem;
+        left: 0.75rem;
+        z-index: 20;
+        width: min(320px, calc(100vw - 1.5rem));
+        padding: 0.75rem;
+        background: rgba(15, 23, 42, 0.9);
+        border-radius: 0.75rem;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+        backdrop-filter: blur(10px);
+      }
+      #ui.collapsed #ui-body {
+        display: none;
+      }
+      #ui-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      #ui h1 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      #ui h1 a {
+        color: inherit;
+        text-decoration: none;
+      }
+      #ui-toggle {
+        border: none;
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 999px;
+        padding: 0.2rem 0.55rem;
+        cursor: pointer;
+      }
+      #ui label {
+        display: block;
+        font-size: 0.8rem;
+        margin-top: 0.65rem;
+        margin-bottom: 0.25rem;
+        color: #94a3b8;
+      }
+      #ui select, #ui button, #ui input {
+        width: 100%;
+        box-sizing: border-box;
+        background: #1e293b;
+        color: #f8fafc;
+        border: 1px solid #334155;
+        border-radius: 0.45rem;
+        padding: 0.45rem 0.55rem;
+        font-size: 0.82rem;
+      }
+      #ui button {
+        cursor: pointer;
+      }
+      #ui button:hover, #ui select:hover {
+        background: #334155;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+      }
+      .drivers {
+        display: grid;
+        gap: 0.45rem;
+        margin-top: 0.5rem;
+      }
+      .driver-row {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .driver-color {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid rgba(255,255,255,0.3);
+      }
+      #hud {
+        margin-top: 0.8rem;
+        padding: 0.65rem;
+        background: #0f172a;
+        border-radius: 0.5rem;
+      }
+      #timer {
+        font-size: 1.35rem;
+        font-weight: 800;
+        text-align: center;
+      }
+      #scoreboard {
+        margin-top: 0.55rem;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .score-row {
+        display: grid;
+        grid-template-columns: 18px 1fr auto auto;
+        gap: 0.45rem;
+        align-items: center;
+        font-size: 0.8rem;
+      }
+      .pill {
+        padding: 0.12rem 0.35rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        background: #1e293b;
+        color: #cbd5e1;
+      }
+      #canvas-container {
+        width: 100vw;
+        height: 100vh;
+      }
+      .cinematic-mode #ui {
+        display: none !important;
+      }
+      #cinematic-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 100;
+      }
+      .cinematic-mode #cinematic-overlay {
+        display: block;
+      }
+      #cinematic-title {
+        position: absolute;
+        top: 1.25rem;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 1.25rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: rgba(248,250,252,0.9);
+      }
+      #cinematic-countdown {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 7rem;
+        font-weight: 900;
+        display: none;
+        text-shadow: 0 4px 24px rgba(0,0,0,0.7);
+      }
+      #cinematic-countdown.active {
+        display: block;
+      }
+      #cinematic-standings {
+        position: absolute;
+        left: 1.5rem;
+        top: 1.5rem;
+        display: grid;
+        gap: 0.4rem;
+      }
+      .cin-row {
+        display: grid;
+        grid-template-columns: 1.5rem 1rem auto;
+        gap: 0.5rem;
+        align-items: center;
+        font-weight: 700;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.7);
+      }
+      #victory-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 120;
+        background: rgba(2, 6, 23, 0.88);
+        justify-content: center;
+        align-items: center;
+      }
+      #victory-overlay.active {
+        display: flex;
+      }
+      #victory-card {
+        background: rgba(15, 23, 42, 0.95);
+        border: 1px solid #334155;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        min-width: min(460px, calc(100vw - 2rem));
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      }
+      #victory-title {
+        margin: 0 0 0.5rem 0;
+        font-size: 2rem;
+      }
+      #victory-winner {
+        margin: 0 0 1rem 0;
+        color: #cbd5e1;
+      }
+      #victory-list {
+        display: grid;
+        gap: 0.45rem;
+        margin-bottom: 1rem;
+      }
+      .victory-row {
+        display: grid;
+        grid-template-columns: 2rem 1rem 1fr auto;
+        gap: 0.5rem;
+        align-items: center;
+        background: #0f172a;
+        border-radius: 0.6rem;
+        padding: 0.55rem 0.7rem;
+      }
+      .victory-actions {
+        display: flex;
+        gap: 0.6rem;
+      }
+      .victory-actions button {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div id="ui-header">
+        <h1><a href="https://github.com/johlits/bitsports" target="_blank">Kart Racing</a></h1>
+        <button id="ui-toggle" type="button">Hide</button>
+      </div>
+      <div id="ui-body">
+        <div class="grid2">
+          <div>
+            <label for="lap-count">Laps</label>
+            <input id="lap-count" type="number" min="1" max="999" value="9" />
+          </div>
+          <div>
+            <label for="driver-count">Drivers</label>
+            <input id="driver-count" type="number" min="1" max="4" value="4" />
+          </div>
+        </div>
+        <label>Drivers</label>
+        <div id="driver-selects" class="drivers"></div>
+        <button id="start-btn" style="margin-top:0.75rem;">Start Race</button>
+        <div id="hud">
+          <div id="timer">0:00</div>
+          <div id="scoreboard"></div>
+        </div>
+      </div>
+    </div>
+    <div id="canvas-container"></div>
+    <div id="cinematic-overlay">
+      <div id="cinematic-title">Kart Racing</div>
+      <div id="cinematic-standings"></div>
+      <div id="cinematic-countdown"></div>
+    </div>
+    <div id="victory-overlay">
+      <div id="victory-card">
+        <h2 id="victory-title">Race Complete</h2>
+        <p id="victory-winner"></p>
+        <div id="victory-list"></div>
+        <div class="victory-actions">
+          <button id="victory-play-again">Race Again</button>
+          <button id="victory-close">Close</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

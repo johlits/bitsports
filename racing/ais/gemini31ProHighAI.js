@@ -1,0 +1,206 @@
+export const id = "gemini-3-1-pro-high";
+export const name = "Gemini 3.1 Pro High";
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function wrapAngle(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function angleTo(from, to) {
+  return Math.atan2(to.z - from.z, to.x - from.x);
+}
+
+function blendPoint(a, b, t) {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    z: a.z + (b.z - a.z) * t,
+  };
+}
+
+export function tick(state) {
+  const {
+    self,
+    opponents,
+    track,
+    itemBoxes,
+    hazards,
+    getNextCheckpoint,
+    getCenterlinePoint,
+    findNearestOpponentAhead,
+  } = state;
+
+  const roadHalf = track.roadWidth * 0.5;
+  const cp0 = getNextCheckpoint(0);
+  const cp1 = getNextCheckpoint(1);
+
+  // Look ahead a few points to gauge curvature
+  const p0 = { ...getCenterlinePoint(0) };
+  const p1 = { ...getCenterlinePoint(3) };
+  const p2 = { ...getCenterlinePoint(6) };
+  const p3 = { ...getCenterlinePoint(10) };
+
+  const nearAngle = angleTo(p0, p1);
+  const midAngle = angleTo(p1, p2);
+  const farAngle = angleTo(p2, p3);
+  const nearCurve = Math.abs(wrapAngle(midAngle - nearAngle));
+  const farCurve = Math.abs(wrapAngle(farAngle - midAngle));
+  const curve = nearCurve * 1.1 + farCurve * 0.6;
+
+  // 1. Establish the anchor on the road based on the next checkpoint
+  const lateralOffset = (self.x - cp0.x) * cp0.nx + (self.z - cp0.z) * cp0.nz;
+  const laneCorrection = clamp(-lateralOffset * 0.85, -roadHalf * 0.5, roadHalf * 0.5);
+  const cpTarget = {
+    x: cp0.x + cp0.nx * laneCorrection,
+    z: cp0.z + cp0.nz * laneCorrection,
+  };
+
+  // 2. Blend with the dynamic lookahead centerline
+  const lookahead = clamp(Math.floor(3 + self.speed * 0.5), 3, 10);
+  let target = blendPoint(cpTarget, { ...getCenterlinePoint(lookahead) }, 0.4);
+  const farTarget = blendPoint(cp1, { ...getCenterlinePoint(clamp(lookahead + 5, 5, 15)) }, 0.4);
+
+  // 3. Optional small corner cutting logic
+  if (curve > 0.2 && !self.offRoad) {
+    const insideDir = Math.sign(wrapAngle(midAngle - nearAngle));
+    const cornerCut = clamp(curve * 0.7, 0, roadHalf * 0.3);
+    target.x += cp0.nx * insideDir * cornerCut;
+    target.z += cp0.nz * insideDir * cornerCut;
+  }
+
+  // 4. Strategic item box collection
+  if (!self.item && !self.offRoad && curve < 0.3) {
+    let bestBox = null;
+    let bestScore = -Infinity;
+    for (const box of itemBoxes) {
+      const d = dist(self, box);
+      if (d > 2 && d < 15) {
+        const ang = Math.abs(wrapAngle(angleTo(self, box) - self.heading));
+        const boxLane = Math.abs((box.x - cp0.x) * cp0.nx + (box.z - cp0.z) * cp0.nz);
+        const score = -d - ang * 10 - boxLane * 0.5;
+        if (score > bestScore && ang < 0.6) {
+          bestScore = score;
+          bestBox = box;
+        }
+      }
+    }
+    if (bestBox) {
+      target = blendPoint(target, bestBox, 0.25);
+    }
+  }
+
+  // 5. Hazard avoidance
+  for (const haz of hazards) {
+    const d = dist(self, haz);
+    if (d < 6.0) {
+      const ang = wrapAngle(angleTo(self, haz) - self.heading);
+      if (Math.abs(ang) < 0.6) {
+        const side = ang > 0 ? -1 : 1;
+        target.x += cp0.nx * side * 1.2;
+        target.z += cp0.nz * side * 1.2;
+      }
+    }
+  }
+
+  // 6. Opponent overtaking
+  const ahead = findNearestOpponentAhead();
+  if (ahead && ahead.distance < 7 && !self.offRoad && curve < 0.3) {
+    const ang = wrapAngle(angleTo(self, ahead) - self.heading);
+    if (Math.abs(ang) < 0.45) {
+      const side = ang > 0 ? -1 : 1;
+      target.x += cp0.nx * side * 0.7;
+      target.z += cp0.nz * side * 0.7;
+    }
+  }
+
+  // 7. Off-road recovery
+  if (self.offRoad) {
+    const recovery = blendPoint(p0, p1, 0.3);
+    target = blendPoint(target, recovery, 0.85);
+  }
+
+  // 8. Steering & throttle limits
+  const checkpointAngle = angleTo(self, cpTarget);
+  const targetAngle = angleTo(self, target);
+  const err = wrapAngle(targetAngle - self.heading);
+  const checkpointErr = wrapAngle(checkpointAngle - self.heading);
+  const farErr = wrapAngle(angleTo(self, farTarget) - self.heading);
+  const absErr = Math.abs(err);
+  
+  const startupMode = self.lap === 0 && self.progress < 1.25 && self.speed < 5;
+
+  let steer = clamp(checkpointErr * 0.8 + err * 0.7 + farErr * 0.3, -1, 1);
+  let throttle = 1;
+  let brake = 0;
+
+  const desiredSpeed = clamp(
+    13.4 - curve * 7.0 - absErr * 2.5 - (self.offRoad ? 3.0 : 0),
+    self.offRoad ? 4.5 : 6.5,
+    13.4
+  );
+
+  if (self.speed > desiredSpeed + 1.0) {
+    brake = clamp((self.speed - desiredSpeed) / 3.8, 0, 1);
+    throttle = clamp(0.8 - brake * 0.9, 0, 1);
+  } else if (self.speed > desiredSpeed) {
+    throttle = 0.4;
+    brake = 0.1;
+  }
+
+  // Heavy braking if completely pointed wrong
+  if (absErr > 0.9 && !startupMode) {
+    throttle = 0.1;
+    brake = 0.8;
+  } else if (absErr > 0.6 && !startupMode) {
+    throttle = Math.min(throttle, 0.5);
+    brake = Math.max(brake, self.speed > 9.5 ? 0.35 : 0);
+  }
+
+  // Simple straight launch at spawn
+  if (startupMode) {
+    throttle = 1;
+    brake = 0;
+    steer = clamp(checkpointErr / 1.5, -0.2, 0.2);
+  }
+
+  if (self.offRoad) {
+    throttle = Math.max(throttle, 0.7);
+    brake = 0;
+    steer = clamp(err / 0.7, -0.85, 0.85);
+  }
+
+  // 9. Items
+  let useItem = false;
+  if (self.item === "boost") {
+    if (!self.offRoad && curve < 0.18 && absErr < 0.18 && self.speed > 7.0) {
+      useItem = true;
+    }
+  } else if (self.item === "oil") {
+    const closeBehind = opponents.some((o) => {
+      if (o.progress >= self.progress) return false;
+      const d = dist(self, o);
+      const ang = Math.abs(wrapAngle(angleTo(o, self) - o.heading));
+      return d < 6.0 && ang < 0.5;
+    });
+    if (closeBehind) {
+      useItem = true;
+    }
+  } else if (self.item === "rocket") {
+    if (ahead && ahead.distance < 20) {
+      const shotErr = Math.abs(wrapAngle(angleTo(self, ahead) - self.heading));
+      if (shotErr < 0.25) {
+        useItem = true;
+      }
+    }
+  }
+
+  return { throttle, brake, steer, useItem };
+}
